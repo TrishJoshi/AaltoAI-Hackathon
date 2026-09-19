@@ -1,0 +1,9 @@
+{
+  "answers": {
+    "data_residency": "EU",
+    "encryption_at_rest": "AES-256",
+    "processes_pii": "yes",
+    "dpa_signed": "yes",
+    "mfa_for_production": "yes"
+  }
+}

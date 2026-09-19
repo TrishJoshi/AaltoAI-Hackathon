@@ -1,0 +1,75 @@
+{
+  "meta": {
+    "domain": "InfoSec",
+    "title": "Internal Information Security Standard v3",
+    "source": "examples/policies/infosec.md",
+    "version": "1.0"
+  },
+  "keys": [
+    {
+      "id": "data_residency",
+      "question": "Where is personal data stored in production?",
+      "explanation": "Choose the region of the primary production datastore that holds personal data. Use EU for EU member states including Finland; EEA for Norway/Iceland/Liechtenstein; US for United States regions; APAC for Asia-Pacific; other for anywhere else.",
+      "value_enum": ["EU", "EEA", "US", "APAC", "other", ""],
+      "required": true
+    },
+    {
+      "id": "encryption_at_rest",
+      "question": "What encryption is used for production data at rest?",
+      "explanation": "AES-256 if the database/object store uses AES-256 or an approved equivalent. TLS-only if data is encrypted in transit but not at rest. none if production storage is unencrypted. other for any non-listed algorithm.",
+      "value_enum": ["AES-256", "TLS-only", "none", "other", ""],
+      "required": true
+    },
+    {
+      "id": "processes_pii",
+      "question": "Does the project process personal data (PII)?",
+      "explanation": "yes if the system stores or processes names, emails, account identifiers, or other personal data. no only if no personal data is in scope.",
+      "value_enum": ["yes", "no", ""],
+      "required": true
+    },
+    {
+      "id": "dpa_signed",
+      "question": "Is a data processing agreement signed with every processor?",
+      "explanation": "yes if DPAs are in place. no if PII is processed and a DPA is missing. not_applicable if the project does not process personal data.",
+      "value_enum": ["yes", "no", "not_applicable", ""],
+      "required": true
+    },
+    {
+      "id": "mfa_for_production",
+      "question": "Is MFA required for interactive production access?",
+      "explanation": "yes if production SSH/console/cloud consoles require a second factor. no if password-only access is possible.",
+      "value_enum": ["yes", "no", ""],
+      "required": true
+    }
+  ],
+  "statements": [
+    {
+      "id": "stmt_data_residency",
+      "description": "Personal data of EU persons must be stored in the EU or EEA.",
+      "accepted": {
+        "data_residency": ["EU", "EEA"]
+      }
+    },
+    {
+      "id": "stmt_encryption",
+      "description": "Production datastores holding personal data must use AES-256 at rest.",
+      "accepted": {
+        "encryption_at_rest": ["AES-256"]
+      }
+    },
+    {
+      "id": "stmt_dpa",
+      "description": "A DPA must be signed when PII is processed; otherwise not_applicable.",
+      "accepted": {
+        "dpa_signed": ["yes", "not_applicable"]
+      }
+    },
+    {
+      "id": "stmt_mfa",
+      "description": "Interactive production access must require MFA.",
+      "accepted": {
+        "mfa_for_production": ["yes"]
+      }
+    }
+  ]
+}

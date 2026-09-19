@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Comparator run artifacts (keep directory placeholders)
+data/runs/*.json
+data/policies/*.json
+
+.cursor/
+*.gdoc
