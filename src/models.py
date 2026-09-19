@@ -22,6 +22,7 @@ class PolicyKey(BaseModel):
     explanation: str
     value_enum: list[str] = Field(min_length=1)
     required: bool = True
+    source_section_id: str | None = None
 
 
 class PolicySchema(BaseModel):
@@ -38,6 +39,7 @@ class PolicyStatement(BaseModel):
     id: str
     description: str
     accepted: dict[str, list[str]] = Field(min_length=1)
+    source_section_id: str | None = None
 
 
 class PolicyObject(BaseModel):
@@ -50,8 +52,8 @@ class PolicyDocument(BaseModel):
     """Editable on-disk form: questionnaire + pass criteria together."""
 
     meta: PolicyMeta
-    keys: list[PolicyKey] = Field(min_length=1)
-    statements: list[PolicyStatement] = Field(min_length=1)
+    keys: list[PolicyKey] = Field(default_factory=list)
+    statements: list[PolicyStatement] = Field(default_factory=list)
 
     def as_schema(self) -> PolicySchema:
         return PolicySchema(meta=self.meta, keys=self.keys)

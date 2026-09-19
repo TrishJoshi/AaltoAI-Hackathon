@@ -31,19 +31,45 @@ Rules:
 """
 
 
-def generate_policy_document(domain: str, policy_text: str, source: str = "") -> PolicyDocument:
+def generate_policy_document(
+    domain: str,
+    policy_text: str,
+    source: str = "",
+    source_section_id: str | None = None,
+) -> PolicyDocument:
     schema_hint = json.dumps(PolicyDocument.model_json_schema(), indent=2)
     user = (
         f"Domain: {domain}\n"
-        f"Source label: {source or 'user-provided policy text'}\n\n"
-        "Policy text:\n"
+        f"Source label: {source or 'user-provided policy text'}\n"
+    )
+    if source_section_id:
+        user += (
+            f"Source section id: {source_section_id}\n"
+            "Only extract obligations from this section. Do not invent rules from other parts of the document.\n"
+        )
+    user += (
+        "\nPolicy text:\n"
         f"{policy_text}\n\n"
         "Return JSON matching this schema:\n"
         f"{schema_hint}\n"
     )
-    return complete_json(
+    document = complete_json(
         system=POLICY_AGENT_SYSTEM,
         user=user,
         response_model=PolicyDocument,
         retries=1,
+    )
+    if not source_section_id:
+        return document
+    return document.model_copy(
+        update={
+            "keys": [
+                key.model_copy(update={"source_section_id": source_section_id})
+                for key in document.keys
+            ],
+            "statements": [
+                item.model_copy(update={"source_section_id": source_section_id})
+                for item in document.statements
+            ],
+        }
     )

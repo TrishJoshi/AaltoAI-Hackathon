@@ -1,0 +1,59 @@
+{
+  "id": "infosec",
+  "domain": "InfoSec",
+  "source_md": "examples/policies/infosec.md",
+  "sections": [
+    {
+      "id": "sec_preamble",
+      "title": "Preamble",
+      "markdown": "# InfoSec data-handling policy (synthetic, for prototype demo)\n\nSource: Internal Information Security Standard v3, aligned with GDPR Art. 32\n(security of processing) and company hosting rules.",
+      "order": 0
+    },
+    {
+      "id": "sec_personal_data_residency",
+      "title": "Personal data residency",
+      "markdown": "1. Personal data residency\n   Personal data of EU persons must be stored in the European Union or the\n   European Economic Area. Hosting in the United States or other regions is\n   not permitted for production systems that process personal data.",
+      "order": 1
+    },
+    {
+      "id": "sec_encryption_at_rest",
+      "title": "Encryption at rest",
+      "markdown": "2. Encryption at rest\n   Production datastores that hold personal data must use AES-256 (or an\n   equivalent approved algorithm) for encryption at rest. Transport encryption\n   alone is not sufficient. Unencrypted production storage is forbidden.",
+      "order": 2
+    },
+    {
+      "id": "sec_processor_agreements",
+      "title": "Processor agreements",
+      "markdown": "3. Processor agreements\n   If the project processes personal data, a data processing agreement (DPA)\n   must be signed with every processor. Projects that do not process personal\n   data may record this requirement as not applicable.",
+      "order": 3
+    },
+    {
+      "id": "sec_privileged_access",
+      "title": "Privileged access",
+      "markdown": "4. Privileged access\n   Interactive access to production systems must require multi-factor\n   authentication (MFA). Password-only production access is not allowed.",
+      "order": 4
+    }
+  ],
+  "reviews": {
+    "sec_preamble": {
+      "status": "pending",
+      "note": ""
+    },
+    "sec_personal_data_residency": {
+      "status": "covered",
+      "note": ""
+    },
+    "sec_encryption_at_rest": {
+      "status": "pending",
+      "note": ""
+    },
+    "sec_processor_agreements": {
+      "status": "pending",
+      "note": ""
+    },
+    "sec_privileged_access": {
+      "status": "pending",
+      "note": ""
+    }
+  }
+}

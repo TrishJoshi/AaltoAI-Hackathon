@@ -220,6 +220,9 @@ __marimo__/
 # Comparator run artifacts (keep directory placeholders)
 data/runs/*.json
 data/policies/*.json
+data/reviews/*
+!data/reviews/infosec/
+!data/reviews/infosec/**
 
 .cursor/
 *.gdoc
