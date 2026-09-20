@@ -36,6 +36,35 @@ def test_split_prefers_repeated_atx_headings():
     assert titles == ["Preamble", "Residency", "Encryption"]
 
 
+def test_split_gdpr_style_recitals_not_footnotes():
+    text = """# REGULATIONS
+
+Whereas:
+
+(1) The protection of natural persons in relation to the processing of personal data is a fundamental right.
+
+(2) The principles of, and rules on the protection of natural persons with regard to the processing of their personal data should respect their fundamental rights.
+
+(3) Directive 95/46/EC seeks to harmonise the protection of fundamental rights.
+
+---
+(1) OJ C 229, 31.7.2012, p. 90.
+(2) OJ C 391, 18.12.2012, p. 127.
+
+(4) The processing of personal data should be designed to serve mankind.
+"""
+    sections = split_markdown(text)
+    titles = [item.title for item in sections]
+    assert titles[0] == "Preamble"
+    assert titles[1].startswith("(1)")
+    assert titles[2].startswith("(2)")
+    assert titles[3].startswith("(3)")
+    assert titles[4].startswith("(4)")
+    assert len(sections) == 5
+    assert "OJ C 229" not in sections[1].markdown
+    assert "serve mankind" in sections[4].markdown
+
+
 def test_unique_id_suffixes_collisions():
     taken = {"data_residency"}
     assert unique_id("data_residency", taken) == "data_residency_2"

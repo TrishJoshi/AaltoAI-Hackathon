@@ -296,13 +296,15 @@ def persist_run(
     slug: str | None = None,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    now = datetime.now(timezone.utc)
+    stamp = now.strftime("%Y%m%dT%H%M%SZ")
     name = slug or "run"
     path = out_dir / f"{stamp}_{name}.json"
     payload = {
         "results": results.model_dump(),
         "project_object": project_object.model_dump(),
         "overall_status": results.overall_status(),
+        "validated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return path

@@ -1,21 +1,21 @@
-"""Gemini generateContent JSON completions with Pydantic validation."""
+"""OpenAI-compatible JSON completions (Verda / vLLM) with Pydantic validation."""
 
 from __future__ import annotations
 
-import json
 import os
+import re
 import time
-import urllib.error
-import urllib.request
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from dotenv import load_dotenv
+from openai import APIStatusError, OpenAI
 from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
-DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
+# Served id on the current Verda container; GET /v1/models is the source of truth.
+DEFAULT_MODEL = "mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4"
+_resolved_model: str | None = None
 
 
 def load_env() -> None:
@@ -24,85 +24,99 @@ def load_env() -> None:
 
 def get_api_key() -> str:
     load_env()
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is not set. Copy .env.example to .env.")
+        raise RuntimeError("OPENAI_API_KEY is not set. Copy .env.example to .env.")
     return api_key
 
 
 def get_model() -> str:
     load_env()
-    return os.getenv("GEMINI_MODEL") or os.getenv("OPENAI_MODEL") or DEFAULT_GEMINI_MODEL
+    if _resolved_model:
+        return _resolved_model
+    return (os.getenv("OPENAI_MODEL") or "").strip() or DEFAULT_MODEL
 
 
 def get_base_url() -> str:
     load_env()
-    raw = os.getenv("GEMINI_BASE_URL") or DEFAULT_GEMINI_BASE_URL
+    raw = os.getenv("OPENAI_BASE_URL") or ""
+    if not raw:
+        raise RuntimeError("OPENAI_BASE_URL is not set. Copy .env.example to .env.")
     base = raw.rstrip("/")
-    if ":generateContent" in base:
-        base = base.split("/models/", 1)[0]
-    for suffix in ("/openai", "/chat/completions", "/completions"):
+    for suffix in ("/chat/completions", "/completions"):
         if base.endswith(suffix):
             base = base[: -len(suffix)]
     return base
 
 
-def _retry_seconds(error_body: str, attempt: int) -> float:
+def _client() -> OpenAI:
+    return OpenAI(base_url=get_base_url(), api_key=get_api_key(), timeout=180.0)
+
+
+def _served_model_ids(client: OpenAI) -> list[str]:
     try:
-        payload = json.loads(error_body)
-        details = payload[0]["error"].get("details", []) if isinstance(payload, list) else payload.get("error", {}).get("details", [])
-        for detail in details:
-            delay = detail.get("retryDelay")
-            if delay:
-                return max(float(str(delay).rstrip("s")), 1.0)
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        pass
-    return float(8 * (attempt + 1))
+        return [item.id for item in client.models.list().data]
+    except Exception:
+        return []
 
 
-def _extract_text(data: dict[str, Any]) -> str:
-    candidates = data.get("candidates") or []
-    if not candidates:
-        raise RuntimeError(f"Gemini returned no candidates: {data}")
-    parts = candidates[0].get("content", {}).get("parts") or []
-    return "".join(part.get("text", "") for part in parts)
+class QuotaExceededError(RuntimeError):
+    """Raised when the inference endpoint is rate-limited or out of quota."""
 
 
-def generate_content(*, system: str, contents: list[dict[str, Any]]) -> str:
-    url = f"{get_base_url()}/models/{get_model()}:generateContent"
-    payload: dict[str, Any] = {
-        "contents": contents,
-        "systemInstruction": {"parts": [{"text": system}]},
-        "generationConfig": {
-            "temperature": 0,
-            "responseMimeType": "application/json",
-        },
-    }
-    body = json.dumps(payload).encode("utf-8")
+def _short_http_error(code: int, body: str) -> str:
+    message = " ".join(str(body).split())
+    if code == 429:
+        return f"Verda is rate-limiting requests (HTTP 429). {message[:240]}"
+    return f"Verda HTTP {code}: {message[:320]}"
+
+
+def _strip_fences(text: str) -> str:
+    stripped = text.strip()
+    match = re.match(r"^```(?:json)?\s*(.*?)\s*```$", stripped, re.DOTALL | re.IGNORECASE)
+    return match.group(1).strip() if match else stripped
+
+
+def chat_json(messages: list[dict[str, str]]) -> str:
+    global _resolved_model
     last_error: Exception | None = None
-
+    use_json_object = True
+    client = _client()
     for attempt in range(5):
-        request = urllib.request.Request(
-            url,
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "X-goog-api-key": get_api_key(),
-            },
-            method="POST",
-        )
+        kwargs: dict = {
+            "model": get_model(),
+            "messages": messages,
+            "temperature": 0,
+        }
+        if use_json_object:
+            kwargs["response_format"] = {"type": "json_object"}
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
-                return _extract_text(json.loads(response.read().decode("utf-8")))
-        except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace")
-            last_error = RuntimeError(f"Gemini HTTP {exc.code}: {error_body}")
-            if exc.code in {429, 503} and attempt < 4:
-                time.sleep(_retry_seconds(error_body, attempt))
+            response = client.chat.completions.create(**kwargs)
+            content = response.choices[0].message.content or ""
+            if not content.strip():
+                raise RuntimeError("Verda returned an empty message.")
+            return _strip_fences(content)
+        except APIStatusError as exc:
+            body = ""
+            try:
+                body = exc.response.text
+            except Exception:
+                body = str(exc)
+            if use_json_object and exc.status_code == 400 and "json" in body.lower():
+                use_json_object = False
+                continue
+            if exc.status_code == 404:
+                served = [item for item in _served_model_ids(client) if item != get_model()]
+                if served:
+                    _resolved_model = served[0]
+                    continue
+            summary = _short_http_error(exc.status_code, body)
+            last_error = QuotaExceededError(summary) if exc.status_code == 429 else RuntimeError(summary)
+            if exc.status_code in {429, 503} and attempt < 4:
+                time.sleep(float(8 * (attempt + 1)))
                 continue
             raise last_error from None
-
-    raise last_error or RuntimeError("Gemini request failed")
+    raise last_error or RuntimeError("Verda request failed")
 
 
 def complete_json(
@@ -113,29 +127,28 @@ def complete_json(
     retries: int = 1,
 ) -> T:
     """Ask the model for JSON and validate it against ``response_model``."""
-    contents: list[dict[str, Any]] = [{"role": "user", "parts": [{"text": user}]}]
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system + "\nReturn a single JSON object only."},
+        {"role": "user", "content": user},
+    ]
     last_error: Exception | None = None
     last_raw = ""
 
     for _ in range(retries + 1):
-        last_raw = generate_content(system=system, contents=contents)
+        last_raw = chat_json(messages)
         try:
             return response_model.model_validate_json(last_raw)
         except ValidationError as exc:
             last_error = exc
-            contents.append({"role": "model", "parts": [{"text": last_raw}]})
-            contents.append(
+            messages.append({"role": "assistant", "content": last_raw})
+            messages.append(
                 {
                     "role": "user",
-                    "parts": [
-                        {
-                            "text": (
-                                "Your JSON did not match the required schema.\n"
-                                f"Validation errors:\n{exc}\n"
-                                "Return a corrected JSON object only."
-                            )
-                        }
-                    ],
+                    "content": (
+                        "Your JSON did not match the required schema.\n"
+                        f"Validation errors:\n{exc}\n"
+                        "Return a corrected JSON object only."
+                    ),
                 }
             )
 

@@ -1,0 +1,92 @@
+{
+  "id": "growthboard",
+  "name": "GrowthBoard",
+  "description": "Marketing analytics dashboard for CRM contacts",
+  "owner": "Alex Rivera",
+  "owner_email": "alex.rivera@aalto.example",
+  "health_run_id": "demo_compliance_health",
+  "answers_path": "examples/workspaces/growthboard/answers.json",
+  "policy_path": "examples/policies/infosec.schema.json",
+  "connections": [
+    {
+      "id": "aws-rds",
+      "kind": "cloud",
+      "name": "Amazon RDS us-east-1",
+      "detail": "Production datastore · encryption at rest off",
+      "status": "fail",
+      "related_checks": ["stmt_data_residency", "stmt_encryption"]
+    },
+    {
+      "id": "analytics",
+      "kind": "processor",
+      "name": "Unlisted analytics vendor",
+      "detail": "Receives user ids and events · not on approved list",
+      "status": "fail",
+      "related_checks": ["stmt_approved_vendor"]
+    },
+    {
+      "id": "aws-dpa",
+      "kind": "processor",
+      "name": "AWS hosting DPA",
+      "detail": "Data processing agreement on file",
+      "status": "pass",
+      "related_checks": ["stmt_dpa"]
+    },
+    {
+      "id": "onepassword",
+      "kind": "identity",
+      "name": "Shared production SSH key",
+      "detail": "1Password vault · console MFA off",
+      "status": "fail",
+      "related_checks": ["stmt_mfa"]
+    },
+    {
+      "id": "siem",
+      "kind": "logging",
+      "name": "CloudTrail → SIEM",
+      "detail": "Privileged actions logged centrally",
+      "status": "pass",
+      "related_checks": ["stmt_logging"]
+    }
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "source": "examples/workspaces/growthboard/README.md",
+      "language": "markdown"
+    },
+    {
+      "path": "answers.json",
+      "source": "examples/workspaces/growthboard/answers.json",
+      "language": "json"
+    },
+    {
+      "path": "docs/architecture.md",
+      "source": "examples/workspaces/growthboard/docs/architecture.md",
+      "language": "markdown"
+    },
+    {
+      "path": "docs/processors.md",
+      "source": "examples/workspaces/growthboard/docs/processors.md",
+      "language": "markdown"
+    },
+    {
+      "path": "infra/hosting.md",
+      "source": "examples/workspaces/growthboard/infra/hosting.md",
+      "language": "markdown"
+    }
+  ],
+  "findings": [
+    {"path": "README.md", "line": 7, "statement_id": "stmt_data_residency", "status": "fail", "label": "US region"},
+    {"path": "README.md", "line": 8, "statement_id": "stmt_encryption", "status": "fail", "label": "No encryption at rest"},
+    {"path": "README.md", "line": 16, "statement_id": "stmt_approved_vendor", "status": "fail", "label": "Unlisted processor"},
+    {"path": "README.md", "line": 21, "statement_id": "stmt_mfa", "status": "fail", "label": "No MFA"},
+    {"path": "docs/architecture.md", "line": 5, "statement_id": "stmt_data_residency", "status": "fail", "label": "RDS in us-east-1"},
+    {"path": "docs/architecture.md", "line": 9, "statement_id": "stmt_approved_vendor", "status": "fail", "label": "External analytics"},
+    {"path": "docs/architecture.md", "line": 10, "statement_id": "stmt_retention", "status": "fail", "label": "Indefinite retention"},
+    {"path": "docs/processors.md", "line": 6, "statement_id": "stmt_approved_vendor", "status": "fail", "label": "Unlisted SaaS"},
+    {"path": "infra/hosting.md", "line": 3, "statement_id": "stmt_data_residency", "status": "fail", "label": "us-east-1"},
+    {"path": "infra/hosting.md", "line": 4, "statement_id": "stmt_encryption", "status": "fail", "label": "Encryption off"},
+    {"path": "infra/hosting.md", "line": 10, "statement_id": "stmt_mfa", "status": "fail", "label": "Password-only console"}
+  ]
+}

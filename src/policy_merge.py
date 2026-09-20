@@ -104,6 +104,19 @@ def merge_into_document(
     )
 
 
+def prune_document_to_sections(document: PolicyDocument, section_ids: set[str]) -> PolicyDocument:
+    statements = [
+        item for item in document.statements if item.source_section_id in section_ids
+    ]
+    referenced = {key_id for item in statements for key_id in item.accepted}
+    keys = [
+        key
+        for key in document.keys
+        if key.id in referenced or (key.source_section_id or "") in section_ids
+    ]
+    return document.model_copy(update={"keys": keys, "statements": statements})
+
+
 def merge_generated_document(
     base: PolicyDocument,
     incoming: PolicyDocument,
@@ -126,7 +139,13 @@ def set_section_status(
             "Cannot mark a section as exhaustively covered without at least one statement."
         )
     reviews = dict(review.reviews)
-    reviews[section_id] = SectionReview(status=status, note=note)
+    previous = reviews.get(section_id, SectionReview())
+    needs_generation = False if status in {"covered", "no_restriction"} else previous.needs_generation
+    reviews[section_id] = SectionReview(
+        status=status,
+        note=note,
+        needs_generation=needs_generation,
+    )
     return review.model_copy(update={"reviews": reviews})
 
 

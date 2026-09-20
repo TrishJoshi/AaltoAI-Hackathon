@@ -41,6 +41,8 @@ def seed_infosec_review(*, force: bool = False) -> PolicyReview:
         title=document.meta.title,
         review_id="infosec",
         document=seeded,
+        filename="infosec.md",
+        needs_generation=False,
     )
     reviews = {
         section.id: SectionReview(status="pending")

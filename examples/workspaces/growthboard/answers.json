@@ -1,0 +1,9 @@
+{
+  "answers": {
+    "data_residency": "US",
+    "encryption_at_rest": "TLS-only",
+    "processes_pii": "yes",
+    "dpa_signed": "yes",
+    "mfa_for_production": "no"
+  }
+}

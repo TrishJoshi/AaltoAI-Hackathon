@@ -8,6 +8,7 @@ from src.review_models import PolicySection
 
 ATX_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 NUMBERED_ITEM = re.compile(r"^(\d+)\.\s+(.+?)\s*$")
+RECITAL_ITEM = re.compile(r"^\((\d+)\)\s+(\S.*)$")
 NON_ID = re.compile(r"[^a-z0-9]+")
 
 
@@ -27,14 +28,19 @@ def unique_id(base: str, taken: set[str]) -> str:
 
 
 def split_markdown(text: str) -> list[PolicySection]:
-    """Prefer repeated ATX headings; otherwise numbered items; else one section."""
+    """Prefer sequential (1)(2) recitals, then ATX headings, then 1. numbered items."""
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    recitals = _split_recitals(lines)
+    if _body_count(recitals) >= 2:
+        return recitals
     atx = _split_atx(lines)
     if _body_count(atx) >= 2:
         return atx
     numbered = _split_numbered(lines)
     if _body_count(numbered) >= 2:
         return numbered
+    if recitals:
+        return recitals
     if atx:
         return atx
     if numbered:
@@ -81,6 +87,27 @@ def _split_numbered(lines: list[str]) -> list[PolicySection]:
         match = NUMBERED_ITEM.match(line)
         if match:
             starts.append((index, match.group(2).strip()))
+    if len(starts) < 2:
+        return []
+    return _sections_from_starts(lines, starts, preamble_title="Preamble")
+
+
+def _split_recitals(lines: list[str]) -> list[PolicySection]:
+    """Split sequential '(1)', '(2)' recitals; skip footnote markers that restart at (1)."""
+    starts: list[tuple[int, str]] = []
+    expected = 1
+    for index, line in enumerate(lines):
+        match = RECITAL_ITEM.match(line.strip())
+        if not match:
+            continue
+        number = int(match.group(1))
+        if number != expected:
+            continue
+        rest = match.group(2).strip()
+        snippet = rest[:72].rsplit(" ", 1)[0] if len(rest) > 72 else rest
+        title = f"({number}) {snippet}"
+        starts.append((index, title))
+        expected = number + 1
     if len(starts) < 2:
         return []
     return _sections_from_starts(lines, starts, preamble_title="Preamble")

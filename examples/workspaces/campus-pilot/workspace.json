@@ -1,0 +1,43 @@
+{
+  "id": "campus-pilot",
+  "name": "Campus Pilot",
+  "description": "Department booking prototype with incomplete residency evidence",
+  "owner": "Mikael Saarinen",
+  "owner_email": "mikael.saarinen@aalto.example",
+  "health_run_id": "20260919T132227Z_incomplete_missinginfo",
+  "answers_path": "examples/projects/incomplete.answers.json",
+  "policy_path": "examples/policies/infosec.schema.json",
+  "connections": [
+    {
+      "id": "terraform",
+      "kind": "cloud",
+      "name": "Undocumented cloud region",
+      "detail": "Terraform owner left · residency unknown",
+      "status": "missinginfo",
+      "related_checks": ["stmt_data_residency"]
+    },
+    {
+      "id": "okta",
+      "kind": "identity",
+      "name": "Okta + hardware keys",
+      "detail": "MFA required for production console",
+      "status": "pass",
+      "related_checks": ["stmt_mfa"]
+    }
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "source": "examples/projects/incomplete.md",
+      "language": "markdown"
+    },
+    {
+      "path": "answers.json",
+      "source": "examples/projects/incomplete.answers.json",
+      "language": "json"
+    }
+  ],
+  "findings": [
+    {"path": "README.md", "line": 5, "statement_id": "stmt_data_residency", "status": "missinginfo", "label": "Region not documented"}
+  ]
+}
