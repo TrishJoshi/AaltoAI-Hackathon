@@ -10,11 +10,30 @@ from pathlib import Path
 from src.comparator import iterate_policy_statements, load_policy_document
 from src.health_models import HealthSnapshot, PolicyHealth
 from src.health_store import dump_snapshot, load_health_run, wrap_results_object
-from src.models import ProjectObject, ProjectParseResponse
+from src.models import ProjectObject
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACES_DIR = ROOT / "examples" / "workspaces"
 WORKSPACE_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+FILE_PART_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+MAX_WORKSPACE_FILE_BYTES = 200_000
+RESERVED_WORKSPACE_FILES = {"workspace.json"}
+GENERATED_SCHEMA_NAMES = {"answers.json"}
+LANGUAGE_BY_SUFFIX = {
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".json": "json",
+    ".yml": "yaml",
+    ".yaml": "yaml",
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".txt": "text",
+    ".toml": "toml",
+    ".csv": "csv",
+    ".html": "html",
+    ".css": "css",
+}
 
 
 def utc_now() -> str:
@@ -95,6 +114,53 @@ def load_workspace_file(workspace_id: str, rel_path: str) -> dict:
     }
 
 
+def add_workspace_file(workspace_id: str, rel_path: str, content: str) -> dict:
+    spec = load_workspace_spec(workspace_id)
+    cleaned = clean_workspace_rel_path(rel_path)
+    text = content if isinstance(content, str) else str(content or "")
+    encoded = text.encode("utf-8")
+    if len(encoded) > MAX_WORKSPACE_FILE_BYTES:
+        raise ValueError("File is too large (200 KB max)")
+    dest = _safe_dest(spec["id"], cleaned)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text, encoding="utf-8")
+    source = dest.relative_to(Path(ROOT).resolve()).as_posix()
+    language = language_for_path(cleaned)
+    files = spec.setdefault("files", [])
+    updated = False
+    for item in files:
+        if item.get("path") == cleaned:
+            item["source"] = source
+            item["language"] = language
+            updated = True
+            break
+    if not updated:
+        files.append({"path": cleaned, "source": source, "language": language})
+    _save_workspace_spec(spec)
+    return load_workspace(spec["id"])
+
+
+def clean_workspace_rel_path(rel_path: str) -> str:
+    cleaned = (rel_path or "").replace("\\", "/").strip().lstrip("/")
+    if not cleaned or cleaned in {".", ".."}:
+        raise ValueError("Invalid file path")
+    parts = cleaned.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ValueError("Invalid file path")
+    if any(not FILE_PART_RE.fullmatch(part) for part in parts):
+        raise ValueError("Invalid file path")
+    if parts[-1].lower() in RESERVED_WORKSPACE_FILES:
+        raise ValueError("Cannot overwrite workspace metadata")
+    if Path(parts[-1]).suffix.lower() == ".pdf":
+        raise ValueError("PDF upload is not enabled yet. Convert to Markdown or another text file.")
+    return cleaned
+
+
+def language_for_path(rel_path: str) -> str:
+    suffix = Path(rel_path).suffix.lower()
+    return LANGUAGE_BY_SUFFIX.get(suffix, "text")
+
+
 def recheck_workspace(workspace_id: str) -> dict:
     spec = load_workspace_spec(workspace_id)
     snapshot = load_workspace_health(spec)
@@ -103,6 +169,49 @@ def recheck_workspace(workspace_id: str) -> dict:
     payload = dump_snapshot(refreshed)
     bundle = load_workspace(workspace_id)
     bundle["health"] = payload
+    return bundle
+
+
+def check_workspace(workspace_id: str, *, parse: bool = False, parse_keys=None) -> dict:
+    if not parse:
+        return recheck_workspace(workspace_id)
+    spec = load_workspace_spec(workspace_id)
+    metadata = _workspace_metadata(spec)
+    documents = _load_policy_documents(spec)
+    if not documents:
+        raise FileNotFoundError("No policy schema is bound to this workspace")
+    parser = parse_keys or _live_project_parser
+    answers: dict[str, str] = {}
+    policies: list[PolicyHealth] = []
+    stamped = utc_now()
+    for document, source in documents:
+        results, project = iterate_policy_statements(
+            policy_document=document,
+            project_metadata=metadata,
+            parse_keys=parser,
+            existing_project_object=ProjectObject(answers=answers),
+            project_source=source,
+        )
+        answers.update(project.answers)
+        wrapped = wrap_results_object(
+            results,
+            run_id=spec["id"],
+            kind="workspace",
+            validated_at=stamped,
+        )
+        policies.extend(wrapped.policies)
+    snapshot = HealthSnapshot(
+        id=spec["id"],
+        label=spec.get("name") or spec["id"],
+        kind="workspace",
+        project_name=spec.get("name") or "",
+        project_source=spec["id"],
+        validated_at=stamped,
+        policies=policies,
+    )
+    snapshot = snapshot.model_copy(update={"overall_status": snapshot.computed_status()})
+    bundle = load_workspace(workspace_id)
+    bundle["health"] = dump_snapshot(snapshot)
     return bundle
 
 
@@ -192,6 +301,30 @@ def _tree_values(children: dict) -> list[dict]:
     return items
 
 
+def _save_workspace_spec(spec: dict) -> None:
+    workspace_id = safe_workspace_id(spec.get("id") or "")
+    path = WORKSPACES_DIR / workspace_id / "workspace.json"
+    path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
+
+
+def _workspace_root(workspace_id: str) -> Path:
+    return (WORKSPACES_DIR / safe_workspace_id(workspace_id)).resolve()
+
+
+def _safe_dest(workspace_id: str, rel_path: str) -> Path:
+    root = _workspace_root(workspace_id)
+    dest = (root / rel_path).resolve()
+    try:
+        dest.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("File is outside the workspace") from exc
+    if dest.name.lower() in RESERVED_WORKSPACE_FILES:
+        raise ValueError("Cannot overwrite workspace metadata")
+    if dest.exists() and dest.is_dir():
+        raise ValueError("Path is a directory")
+    return dest
+
+
 def _file_entry(spec: dict, rel_path: str) -> dict:
     cleaned = (rel_path or "").replace("\\", "/").lstrip("/")
     if not cleaned or ".." in cleaned.split("/"):
@@ -203,14 +336,63 @@ def _file_entry(spec: dict, rel_path: str) -> dict:
 
 
 def _safe_source(relative: str) -> Path:
-    path = (ROOT / relative.replace("\\", "/")).resolve()
+    root = Path(ROOT).resolve()
+    path = (root / relative.replace("\\", "/")).resolve()
     try:
-        path.relative_to(ROOT)
+        path.relative_to(root)
     except ValueError as exc:
         raise ValueError("File is outside the repository") from exc
     if not path.is_file():
         raise FileNotFoundError(relative)
     return path
+
+
+def _is_generated_schema(rel_path: str) -> bool:
+    name = Path(str(rel_path or "").replace("\\", "/")).name.lower()
+    return name in GENERATED_SCHEMA_NAMES
+
+
+def _workspace_metadata(spec: dict) -> str:
+    parts: list[str] = []
+    for item in spec.get("files") or []:
+        rel = str(item.get("path") or "")
+        if _is_generated_schema(rel):
+            continue
+        source = item.get("source") or ""
+        if not source:
+            continue
+        try:
+            text = _safe_source(source).read_text(encoding="utf-8")
+        except (OSError, ValueError, FileNotFoundError):
+            continue
+        parts.append(f"## {rel}\n\n{text.strip()}")
+    return "\n\n".join(parts).strip()
+
+
+def _policy_source_paths(spec: dict) -> list[str]:
+    paths: list[str] = []
+    for item in spec.get("policy_paths") or []:
+        rel = str(item or "").replace("\\", "/").strip()
+        if rel and rel not in paths:
+            paths.append(rel)
+    single = str(spec.get("policy_path") or "").replace("\\", "/").strip()
+    if single and single not in paths:
+        paths.append(single)
+    return paths
+
+
+def _load_policy_documents(spec: dict) -> list[tuple]:
+    documents: list[tuple] = []
+    for rel in _policy_source_paths(spec):
+        path = _safe_source(rel)
+        documents.append((load_policy_document(path), rel))
+    return documents
+
+
+def _live_project_parser(**kwargs):
+    from src.project_agent import parse_project_keys
+
+    return parse_project_keys(**kwargs)
 
 
 def _load_answers(path: Path) -> ProjectObject:

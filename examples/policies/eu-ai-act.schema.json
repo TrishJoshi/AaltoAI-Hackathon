@@ -1,0 +1,66 @@
+{
+  "meta": {
+    "domain": "AI Act",
+    "title": "EU AI Act use standard (Arts. 6, 10, 13, 14)",
+    "source": "examples/policies/eu-ai-act.md",
+    "version": "1.0"
+  },
+  "statements": [
+    {
+      "id": "stmt_risk_class",
+      "description": "Each production AI system must record an AI Act risk class that is not prohibited.",
+      "keys": [
+        {
+          "id": "ai_risk_class",
+          "question": "What is the AI Act risk class of production AI in this project?",
+          "explanation": "prohibited if the use is banned. high_risk if Annex III uses (education, hiring, access control). limited if transparency duties only. minimal if no special duties. not_applicable if the project has no production AI. Leave empty if not yet classified.",
+          "value_enum": ["prohibited", "high_risk", "limited", "minimal", "not_applicable", ""],
+          "accepted": ["limited", "minimal", "not_applicable"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "stmt_human_oversight",
+      "description": "High-risk AI that affects people must have a named human reviewer.",
+      "keys": [
+        {
+          "id": "human_oversight",
+          "question": "Is a named human reviewer in the loop for AI decisions that affect people?",
+          "explanation": "yes if a named reviewer can override or approve outputs. no if scoring or ranking is fully automated. not_applicable if the system is not high-risk or has no production AI.",
+          "value_enum": ["yes", "no", "not_applicable", ""],
+          "accepted": ["yes", "not_applicable"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "stmt_ai_logging",
+      "description": "High-impact AI outputs must be logged for at least 90 days.",
+      "keys": [
+        {
+          "id": "ai_logging",
+          "question": "Are high-impact AI outputs logged for at least 90 days?",
+          "explanation": "yes if logs of scoring, ranking, or recommendations are retained ≥ 90 days. no if unlogged. not_applicable if there are no high-impact AI outputs.",
+          "value_enum": ["yes", "no", "not_applicable", ""],
+          "accepted": ["yes", "not_applicable"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "stmt_transparency",
+      "description": "Production AI features must publish a model card (purpose, family, limitations).",
+      "keys": [
+        {
+          "id": "model_card",
+          "question": "Is a model card published for production AI features?",
+          "explanation": "yes if purpose, model family, and known limitations are documented. no if production AI is undocumented. not_applicable if there is no production AI.",
+          "value_enum": ["yes", "no", "not_applicable", ""],
+          "accepted": ["yes", "not_applicable"],
+          "required": true
+        }
+      ]
+    }
+  ]
+}

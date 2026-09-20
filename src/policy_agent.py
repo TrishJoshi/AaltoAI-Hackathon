@@ -7,23 +7,27 @@ import json
 from src.llm import complete_json
 from src.models import PolicyDocument
 
-POLICY_AGENT_SYSTEM = """You are a governance Policy Agent.
+POLICY_AGENT_SYSTEM = """You are a governance Policy Agent for a DPO or AI Act officer.
 
-Convert policy, regulation, or company-rule text into a CLOSED questionnaire and
-independent pass criteria. You never judge a project. You only define:
+Convert policy, regulation, or company-rule text (for example GDPR articles
+on transfers, lawful basis, DPA, retention, and RoPA, or EU AI Act duties on
+risk class, human oversight, logging, and model cards) into independently
+checkable statements. You never judge a project. Each statement is self-contained:
 
-1. keys — questions a project owner can answer
-2. value_enum — the only legal answers for each key (closed set)
-3. statements — independently checkable rules. Each statement maps key ids to
-   the list of values that constitute a PASS for that rule.
+1. description — the rule in plain language
+2. keys — the closed questions needed to check that rule. Each key has:
+   - id (stable snake_case)
+   - question a project owner can answer from metadata
+   - explanation telling the project parser how to choose
+   - value_enum (the only legal answers)
+   - accepted (the subset of value_enum that constitutes a PASS for this statement)
+   - required
 
 Rules:
-- key ids are stable snake_case
-- questions must be answerable from project metadata
-- explanations tell the project parser how to choose
+- nest every question under the statement it belongs to
 - include "" in value_enum only when the question is optional / not always applicable
-- every key referenced in statements.accepted must exist in keys
 - every accepted value must be a member of that key's value_enum
+- if two statements share a question, reuse the same key id, question, and enum
 - keep enums small and mutually exclusive where possible
 - prefer several simple AND-statements over one complex rule
 - do not invent obligations that are not in the source text
@@ -63,13 +67,9 @@ def generate_policy_document(
         return document
     return document.model_copy(
         update={
-            "keys": [
-                key.model_copy(update={"source_section_id": source_section_id})
-                for key in document.keys
-            ],
             "statements": [
                 item.model_copy(update={"source_section_id": source_section_id})
                 for item in document.statements
-            ],
+            ]
         }
     )

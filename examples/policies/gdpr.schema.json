@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "domain": "GDPR",
+    "title": "GDPR processing standard (Arts. 5, 6, 28, 30, 44–46)",
+    "source": "examples/policies/gdpr.md",
+    "version": "1.0"
+  },
+  "statements": [
+    {
+      "id": "stmt_transfers",
+      "description": "Personal data of EU persons may only be stored in the EU, the EEA, or an adequate country.",
+      "keys": [
+        {
+          "id": "data_residency",
+          "question": "Where is personal data stored in production?",
+          "explanation": "Choose the region of the primary production datastore that holds personal data. Use EU for EU member states including Finland; EEA for Norway/Iceland/Liechtenstein; adequacy for a third country with an EU adequacy decision; US for United States regions; other for anywhere else.",
+          "value_enum": ["EU", "EEA", "adequacy", "US", "other", ""],
+          "accepted": ["EU", "EEA", "adequacy"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "stmt_lawful_basis",
+      "description": "Each processing activity must have a recorded lawful basis under Article 6.",
+      "keys": [
+        {
+          "id": "lawful_basis",
+          "question": "What is the lawful basis for processing personal data?",
+          "explanation": "consent if data subjects opted in. contract if processing is necessary for a contract with the data subject. legitimate_interest if a balancing test is on file. legal_obligation if EU or member-state law requires the processing. none if no basis is recorded.",
+          "value_enum": ["consent", "contract", "legitimate_interest", "legal_obligation", "none", ""],
+          "accepted": ["consent", "contract", "legitimate_interest", "legal_obligation"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "stmt_dpa",
+      "description": "An Article 28 DPA must be signed when a processor handles personal data; otherwise not_applicable.",
+      "keys": [
+        {
+          "id": "dpa_signed",
+          "question": "Is a data processing agreement signed with every processor?",
+          "explanation": "yes if DPAs are in place. no if personal data is processed by a vendor and a DPA is missing. not_applicable if the project does not use a processor.",
+          "value_enum": ["yes", "no", "not_applicable", ""],
+          "accepted": ["yes", "not_applicable"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "stmt_retention",
+      "description": "Personal data must not be kept longer than a documented, finite retention period.",
+      "keys": [
+        {
+          "id": "retention_policy",
+          "question": "Is a finite retention period defined and enforced?",
+          "explanation": "defined if each personal-data store has a documented period and deletion or anonymisation is enforced. indefinite if logs or CRM extracts are kept without a period.",
+          "value_enum": ["defined", "indefinite", ""],
+          "accepted": ["defined"],
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "stmt_ropa",
+      "description": "This processing activity must be listed in the organisation’s record of processing activities.",
+      "keys": [
+        {
+          "id": "ropa_recorded",
+          "question": "Is this processing listed in the organisation RoPA?",
+          "explanation": "yes if the DPO has a RoPA row for this product. Leave empty if that has not been confirmed yet.",
+          "value_enum": ["yes", ""],
+          "accepted": ["yes"],
+          "required": true
+        }
+      ]
+    }
+  ]
+}

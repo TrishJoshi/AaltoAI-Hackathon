@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "domain": "InfoSec",
+    "title": "Internal Information Security Standard v3",
+    "source": "examples/policies/infosec.md",
+    "version": "1.0"
+  },
+  "statements": [
+    {
+      "id": "stmt_encryption",
+      "description": "Production datastores holding personal data must use AES-256 at rest.",
+      "keys": [
+        {
+          "id": "encryption_at_rest",
+          "question": "What encryption is used for production data at rest?",
+          "explanation": "AES-256 if the database/object store uses AES-256 or an approved equivalent. TLS-only if data is encrypted in transit but not at rest. none if production storage is unencrypted. other for any non-listed algorithm.",
+          "value_enum": [
+            "AES-256",
+            "TLS-only",
+            "none",
+            "other",
+            ""
+          ],
+          "accepted": [
+            "AES-256"
+          ],
+          "required": true
+        }
+      ],
+      "source_section_id": "sec_encryption_at_rest"
+    },
+    {
+      "id": "stmt_mfa",
+      "description": "Interactive production access must require MFA.",
+      "keys": [
+        {
+          "id": "mfa_for_production",
+          "question": "Is MFA required for interactive production access?",
+          "explanation": "yes if production SSH/console/cloud consoles require a second factor. no if password-only access is possible.",
+          "value_enum": [
+            "yes",
+            "no",
+            ""
+          ],
+          "accepted": [
+            "yes"
+          ],
+          "required": true
+        }
+      ],
+      "source_section_id": "sec_privileged_access"
+    },
+    {
+      "id": "stmt_data_residency",
+      "description": "Personal data of EU persons must be stored in the EU or EEA.",
+      "keys": [
+        {
+          "id": "data_residency",
+          "question": "Where is personal data stored in production?",
+          "explanation": "Choose the region of the primary production datastore that holds personal data. Use EU for EU member states including Finland; EEA for Norway/Iceland/Liechtenstein; US for United States regions; APAC for Asia-Pacific; other for anywhere else.",
+          "value_enum": [
+            "EU",
+            "EEA",
+            "US",
+            "APAC",
+            "other",
+            ""
+          ],
+          "accepted": [
+            "EU",
+            "EEA"
+          ],
+          "required": true
+        }
+      ],
+      "source_section_id": "sec_personal_data_residency"
+    },
+    {
+      "id": "stmt_dpa",
+      "description": "A DPA must be signed when PII is processed; otherwise not_applicable.",
+      "keys": [
+        {
+          "id": "dpa_signed",
+          "question": "Is a data processing agreement signed with every processor?",
+          "explanation": "yes if DPAs are in place. no if PII is processed and a DPA is missing. not_applicable if the project does not process personal data.",
+          "value_enum": [
+            "yes",
+            "no",
+            "not_applicable",
+            ""
+          ],
+          "accepted": [
+            "yes",
+            "not_applicable"
+          ],
+          "required": true
+        }
+      ],
+      "source_section_id": "sec_processor_agreements"
+    }
+  ]
+}

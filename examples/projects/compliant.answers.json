@@ -1,9 +1,12 @@
 {
   "answers": {
     "data_residency": "EU",
+    "lawful_basis": "contract",
+    "dpa_signed": "yes",
+    "retention_policy": "defined",
+    "ropa_recorded": "yes",
     "encryption_at_rest": "AES-256",
     "processes_pii": "yes",
-    "dpa_signed": "yes",
     "mfa_for_production": "yes"
   }
 }

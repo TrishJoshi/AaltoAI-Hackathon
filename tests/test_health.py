@@ -29,11 +29,12 @@ def test_demo_file_showcases_health_features():
     assert payload["project_name"] == "GrowthBoard"
     assert payload["validated_at"]
     assert payload["overall_status"] == "fail"
-    assert payload["total"] == 12
-    assert payload["passed"] == 6
+    assert payload["total"] == 9
+    assert payload["passed"] == 3
     assert payload["failed"] == 5
     assert payload["missing"] == 1
-    assert len(payload["policies"]) == 3
+    assert len(payload["policies"]) == 2
+    assert payload["policies"][0]["domain"] == "GDPR"
 
     statuses = {item["status"] for policy in payload["policies"] for item in policy["results"]}
     assert statuses == {"pass", "fail", "missinginfo"}

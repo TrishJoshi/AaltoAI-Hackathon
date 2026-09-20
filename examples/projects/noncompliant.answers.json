@@ -1,9 +1,12 @@
 {
   "answers": {
     "data_residency": "US",
+    "lawful_basis": "none",
+    "dpa_signed": "no",
+    "retention_policy": "indefinite",
+    "ropa_recorded": "",
     "encryption_at_rest": "TLS-only",
     "processes_pii": "yes",
-    "dpa_signed": "no",
     "mfa_for_production": "no"
   }
 }

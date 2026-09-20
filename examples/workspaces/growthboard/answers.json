@@ -1,9 +1,16 @@
 {
   "answers": {
     "data_residency": "US",
+    "lawful_basis": "legitimate_interest",
+    "dpa_signed": "yes",
+    "retention_policy": "indefinite",
+    "ropa_recorded": "",
     "encryption_at_rest": "TLS-only",
     "processes_pii": "yes",
-    "dpa_signed": "yes",
-    "mfa_for_production": "no"
+    "mfa_for_production": "no",
+    "ai_risk_class": "high_risk",
+    "human_oversight": "no",
+    "ai_logging": "yes",
+    "model_card": "no"
   }
 }

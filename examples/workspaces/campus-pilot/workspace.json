@@ -1,20 +1,20 @@
 {
   "id": "campus-pilot",
   "name": "Campus Pilot",
-  "description": "Department booking prototype with incomplete residency evidence",
+  "description": "Department booking prototype — GDPR missing-info: hosting region not documented",
   "owner": "Mikael Saarinen",
   "owner_email": "mikael.saarinen@aalto.example",
-  "health_run_id": "20260919T132227Z_incomplete_missinginfo",
+  "health_run_id": "",
   "answers_path": "examples/projects/incomplete.answers.json",
-  "policy_path": "examples/policies/infosec.schema.json",
+  "policy_path": "examples/policies/gdpr.schema.json",
   "connections": [
     {
       "id": "terraform",
       "kind": "cloud",
       "name": "Undocumented cloud region",
-      "detail": "Terraform owner left · residency unknown",
+      "detail": "Terraform owner left · transfer destination unknown",
       "status": "missinginfo",
-      "related_checks": ["stmt_data_residency"]
+      "related_checks": ["stmt_transfers"]
     },
     {
       "id": "okta",
@@ -22,7 +22,7 @@
       "name": "Okta + hardware keys",
       "detail": "MFA required for production console",
       "status": "pass",
-      "related_checks": ["stmt_mfa"]
+      "related_checks": ["stmt_dpa"]
     }
   ],
   "files": [
@@ -38,6 +38,6 @@
     }
   ],
   "findings": [
-    {"path": "README.md", "line": 5, "statement_id": "stmt_data_residency", "status": "missinginfo", "label": "Region not documented"}
+    {"path": "README.md", "line": 5, "statement_id": "stmt_transfers", "status": "missinginfo", "label": "Region not documented"}
   ]
 }

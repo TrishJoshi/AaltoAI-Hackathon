@@ -1,52 +1,56 @@
 {
   "id": "growthboard",
   "name": "GrowthBoard",
-  "description": "Marketing analytics dashboard for CRM contacts",
+  "description": "CRM dashboard that fails GDPR transfers (US hosting) and EU AI Act oversight (no reviewer, no model card)",
   "owner": "Alex Rivera",
   "owner_email": "alex.rivera@aalto.example",
   "health_run_id": "demo_compliance_health",
   "answers_path": "examples/workspaces/growthboard/answers.json",
-  "policy_path": "examples/policies/infosec.schema.json",
+  "policy_path": "examples/policies/gdpr.schema.json",
+  "policy_paths": [
+    "examples/policies/gdpr.schema.json",
+    "examples/policies/eu-ai-act.schema.json"
+  ],
   "connections": [
     {
       "id": "aws-rds",
       "kind": "cloud",
       "name": "Amazon RDS us-east-1",
-      "detail": "Production datastore · encryption at rest off",
+      "detail": "EU personal data hosted in the United States",
       "status": "fail",
-      "related_checks": ["stmt_data_residency", "stmt_encryption"]
+      "related_checks": ["stmt_transfers"]
     },
     {
       "id": "analytics",
       "kind": "processor",
       "name": "Unlisted analytics vendor",
-      "detail": "Receives user ids and events · not on approved list",
+      "detail": "Receives user ids and events · DPA with AWS only",
       "status": "fail",
-      "related_checks": ["stmt_approved_vendor"]
+      "related_checks": ["stmt_dpa"]
     },
     {
       "id": "aws-dpa",
       "kind": "processor",
       "name": "AWS hosting DPA",
-      "detail": "Data processing agreement on file",
+      "detail": "Article 28 agreement on file",
       "status": "pass",
       "related_checks": ["stmt_dpa"]
     },
     {
-      "id": "onepassword",
-      "kind": "identity",
-      "name": "Shared production SSH key",
-      "detail": "1Password vault · console MFA off",
+      "id": "retention",
+      "kind": "logging",
+      "name": "CRM extracts and event logs",
+      "detail": "Kept indefinitely · no deletion job",
       "status": "fail",
-      "related_checks": ["stmt_mfa"]
+      "related_checks": ["stmt_retention"]
     },
     {
-      "id": "siem",
-      "kind": "logging",
-      "name": "CloudTrail → SIEM",
-      "detail": "Privileged actions logged centrally",
-      "status": "pass",
-      "related_checks": ["stmt_logging"]
+      "id": "lead-score",
+      "kind": "identity",
+      "name": "Lead-scoring model",
+      "detail": "Automated ranking · no named reviewer",
+      "status": "fail",
+      "related_checks": ["stmt_human_oversight"]
     }
   ],
   "files": [
@@ -77,16 +81,13 @@
     }
   ],
   "findings": [
-    {"path": "README.md", "line": 7, "statement_id": "stmt_data_residency", "status": "fail", "label": "US region"},
-    {"path": "README.md", "line": 8, "statement_id": "stmt_encryption", "status": "fail", "label": "No encryption at rest"},
-    {"path": "README.md", "line": 16, "statement_id": "stmt_approved_vendor", "status": "fail", "label": "Unlisted processor"},
-    {"path": "README.md", "line": 21, "statement_id": "stmt_mfa", "status": "fail", "label": "No MFA"},
-    {"path": "docs/architecture.md", "line": 5, "statement_id": "stmt_data_residency", "status": "fail", "label": "RDS in us-east-1"},
-    {"path": "docs/architecture.md", "line": 9, "statement_id": "stmt_approved_vendor", "status": "fail", "label": "External analytics"},
+    {"path": "README.md", "line": 7, "statement_id": "stmt_transfers", "status": "fail", "label": "US region"},
+    {"path": "README.md", "line": 23, "statement_id": "stmt_retention", "status": "fail", "label": "Indefinite retention"},
+    {"path": "README.md", "line": 28, "statement_id": "stmt_human_oversight", "status": "fail", "label": "No reviewer"},
+    {"path": "docs/architecture.md", "line": 5, "statement_id": "stmt_transfers", "status": "fail", "label": "RDS in us-east-1"},
     {"path": "docs/architecture.md", "line": 10, "statement_id": "stmt_retention", "status": "fail", "label": "Indefinite retention"},
-    {"path": "docs/processors.md", "line": 6, "statement_id": "stmt_approved_vendor", "status": "fail", "label": "Unlisted SaaS"},
-    {"path": "infra/hosting.md", "line": 3, "statement_id": "stmt_data_residency", "status": "fail", "label": "us-east-1"},
-    {"path": "infra/hosting.md", "line": 4, "statement_id": "stmt_encryption", "status": "fail", "label": "Encryption off"},
-    {"path": "infra/hosting.md", "line": 10, "statement_id": "stmt_mfa", "status": "fail", "label": "Password-only console"}
+    {"path": "docs/processors.md", "line": 6, "statement_id": "stmt_dpa", "status": "fail", "label": "Unlisted SaaS"},
+    {"path": "infra/hosting.md", "line": 3, "statement_id": "stmt_transfers", "status": "fail", "label": "us-east-1"},
+    {"path": "infra/hosting.md", "line": 7, "statement_id": "stmt_retention", "status": "fail", "label": "No deletion job"}
   ]
 }

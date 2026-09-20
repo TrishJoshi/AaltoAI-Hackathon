@@ -170,3 +170,46 @@ def test_new_upload_requires_a_name(tmp_path, monkeypatch):
         files={"file": ("new-policy.md", b"# Policy\n\n## Access\nRequire MFA.\n", "text/markdown")},
     )
     assert response.status_code == 400
+
+
+def test_list_data_markdown_lists_policy_files_only():
+    client = TestClient(app)
+    response = client.get("/api/data/markdown")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["root"] == "data/policies"
+    paths = {item["path"] for item in body["files"]}
+    assert "data/policies/gdpr.md" in paths
+    assert "data/policies/eu-ai-act.md" in paths
+    assert all(path.startswith("data/policies/") for path in paths)
+    assert all(path.endswith((".md", ".txt")) for path in paths)
+    assert all("data/samples" not in path for path in paths)
+    assert all("data/reviews" not in path for path in paths)
+
+
+def test_from_data_creates_review(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.review_store.REVIEWS_DIR", tmp_path)
+    client = TestClient(app)
+    response = client.post(
+        "/api/reviews/from-data",
+        json={
+            "path": "data/samples/policies/infosec.md",
+            "domain": "InfoSec",
+            "title": "InfoSec from data",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["filename"] == "infosec.md"
+    assert body["source_md"].replace("\\", "/").endswith("data/samples/policies/infosec.md")
+    assert body["version"] == 1
+
+
+def test_from_data_rejects_path_outside_data(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.review_store.REVIEWS_DIR", tmp_path)
+    client = TestClient(app)
+    response = client.post(
+        "/api/reviews/from-data",
+        json={"path": "examples/policies/gdpr.md", "domain": "GDPR", "title": "Nope"},
+    )
+    assert response.status_code == 400

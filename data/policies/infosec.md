@@ -1,7 +1,8 @@
 # InfoSec data-handling policy (synthetic, for prototype demo)
 
 Source: Internal Information Security Standard v3, aligned with GDPR Art. 32
-(security of processing) and company hosting rules.
+(security of processing) and company hosting rules. Upload this file to try
+a third domain after the GDPR walkthrough.
 
 1. Personal data residency
    Personal data of EU persons must be stored in the European Union or the

@@ -26,6 +26,7 @@ from src.models import (
 
 ROOT = Path(__file__).resolve().parents[1]
 INFOSEC_SCHEMA = ROOT / "examples" / "policies" / "infosec.schema.json"
+GDPR_SCHEMA = ROOT / "examples" / "policies" / "gdpr.schema.json"
 
 
 def sample_document(**overrides) -> PolicyDocument:
@@ -92,6 +93,18 @@ class ScriptedParser:
 
 def _answers_parser(answers: dict[str, str]) -> ScriptedParser:
     return ScriptedParser([ProjectParseResponse(answers=answers)])
+
+
+def test_gdpr_schema_loads():
+    document = load_policy_document(GDPR_SCHEMA)
+    assert document.meta.domain == "GDPR"
+    assert {key.id for key in document.keys} >= {
+        "data_residency",
+        "lawful_basis",
+        "dpa_signed",
+        "retention_policy",
+        "ropa_recorded",
+    }
 
 
 def test_infosec_schema_loads():
@@ -326,26 +339,71 @@ def test_recovers_on_later_valid_attempt():
     assert len(parser.calls) == 2
 
 
-def test_policy_document_rejects_unknown_statement_key():
+def test_policy_document_rejects_conflicting_key_definitions():
+    from src.models import StatementKey
+
     with pytest.raises(ValidationError):
         PolicyDocument(
             meta=PolicyMeta(domain="X", title="t", source="s", version="1"),
-            keys=[
-                PolicyKey(
-                    id="only_key",
-                    question="Q",
-                    explanation="E",
-                    value_enum=["a"],
-                )
-            ],
             statements=[
                 PolicyStatement(
-                    id="bad",
+                    id="one",
                     description="d",
-                    accepted={"missing_key": ["a"]},
-                )
+                    keys=[
+                        StatementKey(
+                            id="mfa",
+                            question="MFA required?",
+                            explanation="E",
+                            value_enum=["yes", "no"],
+                            accepted=["yes"],
+                        )
+                    ],
+                ),
+                PolicyStatement(
+                    id="two",
+                    description="d",
+                    keys=[
+                        StatementKey(
+                            id="mfa",
+                            question="Different question?",
+                            explanation="E",
+                            value_enum=["yes", "no"],
+                            accepted=["yes"],
+                        )
+                    ],
+                ),
             ],
         )
+
+
+def test_legacy_keys_json_nests_under_statements():
+    document = PolicyDocument.model_validate(
+        {
+            "meta": {"domain": "X", "title": "t", "source": "s", "version": "1"},
+            "keys": [
+                {
+                    "id": "mfa",
+                    "question": "MFA?",
+                    "explanation": "Console MFA",
+                    "value_enum": ["yes", "no"],
+                    "required": True,
+                }
+            ],
+            "statements": [
+                {
+                    "id": "stmt_mfa",
+                    "description": "MFA required",
+                    "accepted": {"mfa": ["yes"]},
+                }
+            ],
+        }
+    )
+    dumped = document.model_dump()
+    assert "keys" not in dumped
+    assert dumped["statements"][0]["keys"][0]["id"] == "mfa"
+    assert dumped["statements"][0]["keys"][0]["accepted"] == ["yes"]
+    assert dumped["statements"][0]["keys"][0]["question"] == "MFA?"
+    assert [key.id for key in document.keys] == ["mfa"]
 
 
 def test_persist_run(tmp_path: Path):
@@ -415,6 +473,28 @@ def test_cli_check_offline(tmp_path: Path):
 
 def test_offline_infosec_fixtures():
     document = load_policy_document(INFOSEC_SCHEMA)
+    cases = {
+        "compliant": "pass",
+        "noncompliant": "fail",
+        "incomplete": "missinginfo",
+    }
+    for name, expected in cases.items():
+        answers_path = ROOT / "examples" / "projects" / f"{name}.answers.json"
+        existing = ProjectObject.model_validate_json(
+            answers_path.read_text(encoding="utf-8")
+        )
+        results, _ = iterate_policy_statements(
+            document,
+            "fixture",
+            ScriptedParser([]),
+            existing_project_object=existing,
+            project_source=name,
+        )
+        assert results.overall_status() == expected, name
+
+
+def test_offline_gdpr_fixtures():
+    document = load_policy_document(GDPR_SCHEMA)
     cases = {
         "compliant": "pass",
         "noncompliant": "fail",

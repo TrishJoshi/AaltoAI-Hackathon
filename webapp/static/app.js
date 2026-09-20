@@ -8,14 +8,12 @@ const state = {
   view: "list",
   reviews: [],
   review: null,
-  tab: "section",
   sectionId: null,
-  keys: [],
-  statements: [],
+  statementFocus: 0,
+  drafts: {},
   error: "",
   notice: "",
   busy: false,
-  versionPreview: null,
   healthRuns: [],
   health: null,
   healthId: "",
@@ -25,16 +23,32 @@ const state = {
   openTabs: [],
   activeTab: "health",
   fileCache: {},
-  chat: [],
-  chatBusy: false,
-  chatError: "",
   focusPolicyId: "",
+  sampleFiles: [],
+  checkedWorkspaceId: "",
 };
 
 window.addEventListener("hashchange", boot);
+window.addEventListener("resize", () => {
+  if (state.view === "review") syncDocument(false);
+});
 
 function isOwnerView() {
   return state.view === "project" || state.view === "health";
+}
+
+function demoOn() {
+  return !window.PoliviewDemo || window.PoliviewDemo.enabled();
+}
+
+function hasCheckedHealth() {
+  if (demoOn()) return true;
+  return Boolean(state.checkedWorkspaceId && state.checkedWorkspaceId === state.workspaceId);
+}
+
+function displayHealth() {
+  if (!hasCheckedHealth()) return {};
+  return state.health || state.workspace?.health || {};
 }
 
 function bindChrome() {
@@ -57,6 +71,14 @@ function bindChrome() {
   document.getElementById("delete-confirm")?.addEventListener("click", () => confirmDeletePolicy());
 }
 
+function markNavCurrent(id, on) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("current", on);
+  if (on) el.setAttribute("aria-current", "page");
+  else el.removeAttribute("aria-current");
+}
+
 function syncChrome() {
   const owner = isOwnerView();
   document.body.dataset.role = owner ? "owner" : "governance";
@@ -64,10 +86,10 @@ function syncChrome() {
   if (tabs && tabs.activeTabIndex !== (owner ? 1 : 0)) {
     tabs.activeTabIndex = owner ? 1 : 0;
   }
-  document.getElementById("nav-policies")?.toggleAttribute("aria-current", state.view === "list" || state.view === "review");
-  document.getElementById("nav-project")?.toggleAttribute("aria-current", state.view === "project");
-  document.getElementById("nav-health")?.toggleAttribute("aria-current", state.view === "health");
-  showProgress(state.busy || state.chatBusy);
+  markNavCurrent("nav-policies", state.view === "list" || state.view === "review");
+  markNavCurrent("nav-project", state.view === "project");
+  markNavCurrent("nav-health", state.view === "health");
+  showProgress(state.busy);
 }
 
 function showProgress(on) {
@@ -93,7 +115,7 @@ function askDeletePolicy(id, title) {
   pendingDelete = id;
   const message = document.getElementById("delete-message");
   if (message) {
-    message.textContent = `Remove “${title}” from the library? This also deletes data/policies/${id}.json.`;
+    message.textContent = `Remove “${title}” from the library? Projects will no longer be measured against its closed GDPR or AI Act checks (data/policies/${id}.json).`;
   }
   const dialog = document.getElementById("delete-dialog");
   if (dialog && typeof dialog.show === "function") dialog.show();
@@ -132,6 +154,86 @@ function banners() {
   `;
 }
 
+function futureCopy(value) {
+  return `Not in this demo: ${value} Pass / fail / missing info would still come from the comparator, not the model.`;
+}
+
+function policyStory(item) {
+  const id = String(item?.id || item?.policy_id || "").toLowerCase();
+  const domain = String(item?.domain || "").toLowerCase();
+  if (id === "gdpr" || domain.includes("gdpr")) {
+    return "Personal data of EU persons: transfers, lawful basis, DPA, retention, and the record of processing.";
+  }
+  if (id === "eu-ai-act" || domain.includes("ai")) {
+    return "Production AI that affects people: risk class, human oversight, logging, and a published model card.";
+  }
+  return "";
+}
+
+function policyCardClass(item) {
+  const id = String(item?.id || "").toLowerCase();
+  const domain = String(item?.domain || "").toLowerCase();
+  if (id === "gdpr" || domain.includes("gdpr")) return " domain-gdpr";
+  if (id === "eu-ai-act" || domain.includes("ai")) return " domain-aiact";
+  return "";
+}
+
+function futureHit(innerHtml, value) {
+  const copy = futureCopy(value);
+  return `<span class="future-hit" tabindex="0" data-future="${escAttr(copy)}" aria-label="${escAttr(copy)}">${innerHtml}</span>`;
+}
+
+function bindFutureTips() {
+  const tip = document.getElementById("future-tooltip");
+  if (!tip) return;
+  const hide = () => {
+    tip.hidden = true;
+  };
+  hide();
+  if (!window.__futureTipScroll) {
+    window.__futureTipScroll = true;
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+  }
+  document.querySelectorAll("[data-future]").forEach((el) => {
+    const show = () => {
+      tip.textContent = el.getAttribute("data-future") || "";
+      tip.hidden = false;
+      const box = el.getBoundingClientRect();
+      const width = Math.min(360, window.innerWidth - 24);
+      let left = box.left;
+      if (left + width > window.innerWidth - 12) left = Math.max(12, window.innerWidth - width - 12);
+      tip.style.width = `${width}px`;
+      tip.style.left = `${left}px`;
+      tip.style.top = `${Math.max(12, box.top + 8)}px`;
+      requestAnimationFrame(() => {
+        const height = tip.offsetHeight;
+        const spaceBelow = window.innerHeight - box.bottom;
+        const spaceAbove = box.top;
+        let top;
+        if (box.height > 160) {
+          top = Math.min(Math.max(12, box.top + 12), window.innerHeight - height - 12);
+        } else if (spaceBelow >= height + 12) {
+          top = box.bottom + 8;
+        } else if (spaceAbove >= height + 12) {
+          top = box.top - height - 8;
+        } else {
+          top = Math.max(12, window.innerHeight - height - 12);
+        }
+        if (left + width > window.innerWidth - 8) {
+          left = Math.max(8, window.innerWidth - width - 8);
+          tip.style.left = `${left}px`;
+        }
+        tip.style.top = `${top}px`;
+      });
+    };
+    el.addEventListener("mouseenter", show);
+    el.addEventListener("mouseleave", hide);
+    el.addEventListener("focus", show);
+    el.addEventListener("blur", hide);
+  });
+}
+
 function renderLoading() {
   return `<div class="page-loading"><md-circular-progress indeterminate></md-circular-progress><p class="muted">Loading ${PRODUCT}…</p></div>`;
 }
@@ -154,7 +256,7 @@ async function boot() {
     } else if (route.view === "health") {
       await loadHealth(route.runId, route.filter);
     } else if (route.view === "review") {
-      await loadReview(route.id, route.tab, route.sectionId);
+      await loadReview(route.id, route.sectionId);
     } else {
       await loadList();
     }
@@ -183,22 +285,20 @@ function parseHash() {
     };
   }
   if (parts[0] === "reviews" && parts[1]) {
-    const tab = params.get("tab");
     return {
       view: "review",
       id: parts[1],
-      tab: tab === "document" || tab === "history" ? tab : "section",
       sectionId: params.get("sid"),
     };
   }
   return { view: "list" };
 }
 
-function setHash(reviewId, tab, sectionId) {
+function setHash(reviewId, sectionId) {
   const params = new URLSearchParams();
-  params.set("tab", tab);
   if (sectionId) params.set("sid", sectionId);
-  location.hash = `#/reviews/${reviewId}?${params.toString()}`;
+  const query = params.toString();
+  location.hash = `#/reviews/${reviewId}${query ? `?${query}` : ""}`;
 }
 
 async function api(path, options = {}) {
@@ -231,45 +331,74 @@ function formatDetail(detail) {
 }
 
 async function loadList() {
-  const data = await api("/api/reviews");
+  const [data, files] = await Promise.all([
+    api("/api/reviews"),
+    api("/api/data/markdown").catch(() => ({ files: [] })),
+  ]);
   state.view = "list";
-  state.reviews = data.reviews || [];
+  const reviews = data.reviews || [];
+  state.reviews = window.PoliviewDemo ? window.PoliviewDemo.filterReviews(reviews) : reviews;
+  state.sampleFiles = files.files || [];
   state.review = null;
   state.error = "";
   state.notice = "";
-  subtitleEl.textContent = "Policy library · versions and coverage";
+  subtitleEl.textContent = "Governance · GDPR & EU AI Act";
   document.title = `${PRODUCT} · Policies`;
   render();
 }
 
-async function loadReview(id, tab, sectionId) {
-  const review = await api(`/api/reviews/${id}`);
+async function loadReview(id, sectionId) {
+  if (window.PoliviewDemo && !window.PoliviewDemo.enabled() && window.PoliviewDemo.isReview(id)) {
+    location.hash = "#/";
+    return;
+  }
+  const alreadyOpen = state.review?.id === id && state.view === "review";
+  if (!alreadyOpen) {
+    const review = await api(`/api/reviews/${id}`);
+    state.review = review;
+    state.drafts = {};
+    state.statementFocus = 0;
+  }
   state.view = "review";
-  state.review = review;
-  state.tab = tab || "section";
-  const first = review.sections[0]?.id;
-  state.sectionId = sectionId && review.sections.some((s) => s.id === sectionId) ? sectionId : first;
-  pullDraft();
+  const first = state.review.sections[0]?.id;
+  const nextId =
+    sectionId && state.review.sections.some((item) => item.id === sectionId) ? sectionId : first;
   state.error = "";
-  if (tab !== "history") state.versionPreview = null;
-  subtitleEl.textContent = `${review.document.meta.title} · ${review.domain} · v${review.version || 1}`;
-  document.title = `${PRODUCT} · ${review.document.meta.title}`;
+  subtitleEl.textContent = `${state.review.document.meta.title} · ${state.review.domain} · v${state.review.version || 1}`;
+  document.title = `${PRODUCT} · ${state.review.document.meta.title}`;
+  if (alreadyOpen && document.getElementById("doc-paper")) {
+    showSection(nextId, true);
+    return;
+  }
+  state.sectionId = nextId;
   render();
 }
 
-function pullDraft() {
-  if (!state.review || !state.sectionId) {
-    state.keys = [];
-    state.statements = [];
-    return;
+function sectionStatements(sectionId) {
+  if (!state.drafts[sectionId]) {
+    state.drafts[sectionId] = (state.review?.document.statements || [])
+      .filter((item) => item.source_section_id === sectionId)
+      .map((item) => ({
+        ...clone(item),
+        keys: (item.keys || []).map((key) => ({
+          ...clone(key),
+          accepted: [...(key.accepted || [])],
+          value_enum: [...(key.value_enum || [])],
+        })),
+      }));
   }
-  const sid = state.sectionId;
-  const statements = state.review.document.statements.filter((item) => item.source_section_id === sid);
-  const referenced = new Set(statements.flatMap((item) => Object.keys(item.accepted || {})));
-  state.statements = statements.map(clone);
-  state.keys = state.review.document.keys
-    .filter((key) => key.source_section_id === sid || referenced.has(key.id))
-    .map(clone);
+  return state.drafts[sectionId];
+}
+
+function blankKey(index) {
+  return {
+    id: `key_${index}`,
+    question: "",
+    explanation: "",
+    value_enum: ["yes", "no"],
+    accepted: [],
+    required: true,
+  };
 }
 
 function clone(value) {
@@ -284,6 +413,112 @@ function sectionStatus(sectionId) {
   return state.review?.reviews?.[sectionId]?.status || "pending";
 }
 
+function statementStatus(item) {
+  const keys = item.keys || [];
+  if (!item.description?.trim() && !keys.length) return "pending";
+  const ready =
+    Boolean(item.description?.trim()) &&
+    keys.length > 0 &&
+    keys.every(
+      (key) =>
+        key.id &&
+        key.question?.trim() &&
+        (key.value_enum || []).length &&
+        (key.accepted || []).length
+    );
+  return ready ? "ready" : "incomplete";
+}
+
+function labelStatementStatus(status) {
+  if (status === "ready") return "Ready";
+  if (status === "incomplete") return "Needs details";
+  return "Empty";
+}
+
+function sectionIndex() {
+  const index = state.review?.sections.findIndex((item) => item.id === state.sectionId);
+  return index >= 0 ? index : 0;
+}
+
+function showSection(sectionId, animate) {
+  if (!state.review?.sections.some((item) => item.id === sectionId)) return;
+  const changed = state.sectionId !== sectionId;
+  if (changed) {
+    state.sectionId = sectionId;
+    state.statementFocus = 0;
+  }
+  syncDocument(Boolean(animate));
+  refreshSummary();
+  refreshNav();
+  if (!changed) return;
+  refreshInspector();
+  focusStatement(0);
+}
+
+function syncDocument(animate) {
+  const paper = document.getElementById("doc-paper");
+  if (!paper) return;
+  paper.querySelectorAll(".doc-section").forEach((el) => {
+    const selected = el.dataset.section === state.sectionId;
+    el.classList.toggle("selected", selected);
+    const heading = el.querySelector(".doc-section-title");
+    if (selected) heading?.setAttribute("data-tour", "source-text");
+    else heading?.removeAttribute("data-tour");
+  });
+  const active = document.getElementById(`block-${state.sectionId}`);
+  if (active && animate) {
+    active.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function stepSection(delta) {
+  const index = state.review.sections.findIndex((item) => item.id === state.sectionId);
+  const next = state.review.sections[index + delta];
+  if (!next) return;
+  showSection(next.id, true);
+  setHash(state.review.id, next.id);
+}
+
+function refreshNav() {
+  const index = sectionIndex();
+  const total = state.review?.sections.length || 0;
+  document.getElementById("prev-section")?.toggleAttribute("disabled", index <= 0);
+  document.getElementById("next-section")?.toggleAttribute("disabled", index >= total - 1);
+  const label = document.getElementById("section-pos");
+  if (label) label.textContent = `Article ${total ? index + 1 : 0} / ${total}`;
+}
+
+function refreshInspector() {
+  const el = document.getElementById("statement-sidebar");
+  if (!el) return;
+  el.innerHTML = renderInspector();
+  bindInspector();
+}
+
+function refreshSummary() {
+  document.querySelectorAll(".status-chip").forEach((chip) => {
+    const sameSection = chip.dataset.jumpSection === state.sectionId;
+    const stmt = chip.dataset.jumpStmt;
+    const current = sameSection && (stmt === "" || Number(stmt) === state.statementFocus);
+    chip.classList.toggle("current", current);
+  });
+}
+
+function focusStatement(index) {
+  const statements = sectionStatements(state.sectionId);
+  const bounded = Math.max(0, Math.min(Number(index) || 0, Math.max(statements.length - 1, 0)));
+  state.statementFocus = bounded;
+  document.querySelectorAll(".statement-card.focused, .inspector-stmt.focused").forEach((card) => {
+    card.classList.remove("focused");
+  });
+  const card = document.getElementById(`stmt-card-${state.sectionId}-${bounded}`);
+  const readout = document.getElementById(`inspect-stmt-${state.sectionId}-${bounded}`);
+  card?.classList.add("focused");
+  readout?.classList.add("focused");
+  readout?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  refreshSummary();
+}
+
 function progressLabel(progress) {
   const done = (progress.covered || 0) + (progress.no_restriction || 0);
   return `${done}/${progress.total} reviewed · ${progress.pending || 0} pending`;
@@ -291,24 +526,27 @@ function progressLabel(progress) {
 
 function render() {
   document.body.classList.toggle("workbench", state.view === "project");
+  document.body.classList.toggle("review-doc", state.view === "review");
   syncChrome();
   if (state.view === "list") {
     appEl.innerHTML = renderList();
     bindList();
-    return;
-  }
-  if (state.view === "health") {
+    bindFutureTips();
+  } else if (state.view === "health") {
     appEl.innerHTML = renderHealth();
     bindHealth();
-    return;
-  }
-  if (state.view === "project") {
+    bindFutureTips();
+  } else if (state.view === "project") {
     appEl.innerHTML = renderProject();
     bindProject();
-    return;
+    bindFutureTips();
+  } else {
+    appEl.innerHTML = renderReview();
+    bindReview();
+    bindFutureTips();
+    syncDocument(false);
   }
-  appEl.innerHTML = renderReview();
-  bindReview();
+  window.dispatchEvent(new CustomEvent("poliview:render", { detail: { view: state.view } }));
 }
 
 function renderList() {
@@ -322,17 +560,21 @@ function renderList() {
           : `<md-filled-tonal-button data-sync="${escAttr(item.id)}">${actionLabel}</md-filled-tonal-button>`;
       const dirty = (item.dirty_section_ids || []).length;
       const dirtyNote = dirty ? ` · ${dirty} section${dirty === 1 ? "" : "s"} need checks` : "";
+      const seeded = window.PoliviewDemo?.isReview?.(item.id);
+      const story = policyStory(item);
       return `
-      <article class="review-card">
+      <article class="review-card${seeded ? " seeded" : ""}${policyCardClass(item)}" data-tour="policy-${escAttr(item.id)}">
         <div>
+          <p class="card-kicker"><span class="badge ${domainBadge(item.domain)}">${esc(item.domain)}</span>${seeded ? `<span class="muted">Demo standard</span>` : ""}</p>
           <h2 class="md-typescale-title-large">${esc(item.title)}</h2>
-          <p class="muted">${esc(item.domain)} · ${esc(item.filename || item.source_md)} · v${item.version || 1}</p>
+          ${story ? `<p class="card-blurb">${esc(story)}</p>` : ""}
+          <p class="muted">${esc(item.filename || item.source_md)} · v${item.version || 1}</p>
           <p class="progress">${esc(progressLabel(item.progress))}${esc(dirtyNote)}</p>
           <p class="muted">Updated ${esc(item.updated_at || "—")}</p>
         </div>
         <div class="card-actions">
           ${actionBtn}
-          <md-filled-button href="#/reviews/${encodeURIComponent(item.id)}?tab=section">Open</md-filled-button>
+          <md-filled-button href="#/reviews/${encodeURIComponent(item.id)}">Open</md-filled-button>
           <md-text-button data-delete="${escAttr(item.id)}" data-delete-title="${escAttr(item.title)}">
             <md-icon slot="icon">delete</md-icon>
             Delete
@@ -347,14 +589,20 @@ function renderList() {
         `<md-select-option value="${escAttr(item.id)}"><div slot="headline">${esc(item.title)} (v${item.version || 1})</div></md-select-option>`
     )
     .join("");
+  const fileOptions = (state.sampleFiles || [])
+    .map(
+      (file) =>
+        `<md-select-option value="${escAttr(file.path)}"><div slot="headline">${esc(file.name)}</div><div slot="supporting-text">${esc(file.folder)}</div></md-select-option>`
+    )
+    .join("");
   return `
     ${banners()}
-    <section class="page-header">
-      <p class="eyebrow">Governance</p>
+    <section class="page-header" data-tour="library">
+      <p class="eyebrow">Governance · DPO &amp; AI Act officer</p>
       <h1 class="md-typescale-headline-medium">Policy library</h1>
-      <p class="muted">Turn law or company policy into closed checks. You keep final say before a project is measured against them.</p>
+      <p class="muted">Load the law once — GDPR for personal data, the EU AI Act for production models. Close the questions. Keep final say. Every product team then ships against the same checks.</p>
     </section>
-    <form id="upload-form" class="pane upload-card">
+    <form id="upload-form" class="pane upload-card" data-tour="upload">
       <div class="row">
         <div class="field">
           <md-outlined-select id="upload-target" label="Target" name="review_id">
@@ -363,50 +611,56 @@ function renderList() {
           </md-outlined-select>
         </div>
         <div class="field" id="title-field">
-          <md-outlined-text-field id="upload-title" label="Policy name" name="title" placeholder="e.g. GDPR recitals"></md-outlined-text-field>
+          <md-outlined-text-field id="upload-title" label="Policy name" name="title" placeholder="e.g. GDPR Arts. 44–46"></md-outlined-text-field>
         </div>
         <div class="field">
-          <md-outlined-text-field id="upload-domain" label="Domain" name="domain" value="InfoSec" required></md-outlined-text-field>
+          <md-outlined-text-field id="upload-domain" label="Domain" name="domain" value="GDPR" required></md-outlined-text-field>
         </div>
-        <div class="field file-pick" style="min-width:18rem;flex:1">
-          <input id="file-input" type="file" name="file" hidden accept=".md,.txt,text/markdown,.pdf" />
-          <md-outlined-button id="pick-file" type="button">
-            <md-icon slot="icon">upload_file</md-icon>
-            <span id="file-label">Choose Markdown</span>
-          </md-outlined-button>
+        <div class="field" style="min-width:18rem;flex:1">
+          <md-outlined-select id="upload-file" label="Markdown in /data/policies" name="path">
+            <md-select-option value="" selected><div slot="headline">Select a policy file from /data/policies</div></md-select-option>
+            ${fileOptions}
+          </md-outlined-select>
         </div>
-        <md-filled-button type="submit">Upload</md-filled-button>
+        ${futureHit(
+          `<md-outlined-button disabled type="button" title="PDF ingest is not in this demo"><md-icon slot="icon">picture_as_pdf</md-icon>Upload PDF</md-outlined-button>`,
+          "a DPO could drop the full GDPR or EU AI Act PDF here. Split → draft → human sign-off would stay the same."
+        )}
+        <md-filled-button type="submit">Load from /data/policies</md-filled-button>
       </div>
-      <p class="muted" style="margin:0.7rem 0 0">Upload Markdown to start or version a review. PDF can be added later — convert to Markdown for now.</p>
+      <p class="muted" style="margin:0.7rem 0 0">Markdown listed here lives in <code>/data/policies</code>. Edit on disk, then load — no file explorer. Use <strong>Generate policies</strong> to draft closed checks; you keep final say.</p>
     </form>
-    <div class="review-list">${cards || "<p class='muted'>No policies yet.</p>"}</div>
+    <div class="review-list" data-tour="demo-policies">${cards || `<p class='muted'>No policies in your library. Load Markdown from <code>/data/policies</code> above${window.PoliviewDemo && !window.PoliviewDemo.enabled() ? ", or turn <strong>Demo</strong> on to restore GDPR, the EU AI Act, GrowthBoard, and Campus Pilot" : ""}.</p>`}</div>
   `;
 }
 
 function bindList() {
   const target = document.getElementById("upload-target");
   const titleField = document.getElementById("title-field");
+  const fileSelect = document.getElementById("upload-file");
   const toggleTitle = () => {
     if (!titleField) return;
     titleField.style.display = target?.value ? "none" : "";
   };
+  const fillFromPath = () => {
+    const path = fileSelect?.value || "";
+    if (!path || target?.value) return;
+    const titleEl = document.getElementById("upload-title");
+    const domainEl = document.getElementById("upload-domain");
+    if (titleEl) titleEl.value = guessTitleFromPath(path);
+    if (domainEl) domainEl.value = guessDomainFromPath(path);
+  };
   target?.addEventListener("change", toggleTitle);
+  fileSelect?.addEventListener("change", fillFromPath);
   toggleTitle();
-  document.getElementById("pick-file")?.addEventListener("click", () => {
-    document.getElementById("file-input")?.click();
-  });
-  document.getElementById("file-input")?.addEventListener("change", (event) => {
-    const label = document.getElementById("file-label");
-    if (label) label.textContent = event.target.files[0]?.name || "Choose Markdown";
-  });
   document.getElementById("upload-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const file = document.getElementById("file-input")?.files[0];
-    const reviewId = document.getElementById("upload-target")?.value || "";
+    const path = fileSelect?.value || "";
+    const reviewId = target?.value || "";
     const title = document.getElementById("upload-title")?.value?.trim() || "";
-    const domain = document.getElementById("upload-domain")?.value || "InfoSec";
-    if (!file) {
-      state.error = "Choose a Markdown file.";
+    const domain = document.getElementById("upload-domain")?.value || "GDPR";
+    if (!path) {
+      state.error = "Select a Markdown file from /data/policies.";
       render();
       return;
     }
@@ -415,19 +669,21 @@ function bindList() {
       render();
       return;
     }
-    const payload = new FormData();
-    payload.append("domain", domain);
-    payload.append("file", file);
-    payload.append("review_id", reviewId);
-    payload.append("title", title);
     try {
-      const response = await fetch("/api/reviews/upload", { method: "POST", body: payload });
-      const data = await response.json();
-      if (!response.ok) throw new Error(formatDetail(data.detail));
+      const data = await api("/api/reviews/from-data", {
+        method: "POST",
+        body: JSON.stringify({
+          path,
+          domain,
+          title,
+          review_id: reviewId,
+        }),
+      });
       const isUpdate = Boolean(reviewId);
+      const name = path.split("/").pop();
       state.notice = isUpdate
-        ? `Stored ${data.filename || file.name} as v${data.version}. Use Update policies to refresh changed checks.`
-        : `Added ${data.filename || file.name}. Use Generate policies to draft closed checks.`;
+        ? `Stored ${data.filename || name} as v${data.version}. Use Update policies so new GDPR or EU AI Act text refreshes only the changed checks.`
+        : `Loaded ${data.filename || name}. Use Generate policies to draft closed checks; you keep final say.`;
       toast(state.notice);
       await loadList();
     } catch (err) {
@@ -450,14 +706,6 @@ function renderReview() {
     action === "none"
       ? ""
       : `<md-filled-tonal-button id="sync-policies" ${state.busy ? "disabled" : ""}>${syncLabel}</md-filled-tonal-button>`;
-  const tabs = `
-    <md-tabs id="review-tabs" class="review-tabs" aria-label="Review views">
-      <md-secondary-tab ${state.tab === "section" ? "active" : ""}>Section review</md-secondary-tab>
-      <md-secondary-tab ${state.tab === "document" ? "active" : ""}>Full document</md-secondary-tab>
-      <md-secondary-tab ${state.tab === "history" ? "active" : ""}>Version history</md-secondary-tab>
-    </md-tabs>`;
-  const body =
-    state.tab === "document" ? renderDocument() : state.tab === "history" ? renderHistory() : renderSection();
   return `
     ${banners()}
     <p><md-text-button href="#/">
@@ -468,14 +716,21 @@ function renderReview() {
       <h1 class="md-typescale-headline-small" style="margin:0">${esc(review.document.meta.title)}</h1>
       <span class="progress">${esc(progress)} · v${review.version || 1}</span>
       ${syncBtn}
-      <md-outlined-button id="export-cli">Export for CLI</md-outlined-button>
+      ${futureHit(
+        `<md-text-button disabled title="Version history is not in this demo"><md-icon slot="icon">history</md-icon>Version history</md-text-button>`,
+        "legal could compare earlier signed-off drafts of GDPR or the EU AI Act before a shipment is measured."
+      )}
+      ${futureHit(
+        `<md-text-button disabled title="Share for sign-off is not in this demo"><md-icon slot="icon">ios_share</md-icon>Share for sign-off</md-text-button>`,
+        "a DPO or AI Act officer could send this closed schema to another reviewer without changing how projects are compared."
+      )}
       <md-text-button id="delete-policy" data-delete="${escAttr(review.id)}" data-delete-title="${escAttr(review.document.meta.title)}">
         <md-icon slot="icon">delete</md-icon>
         Delete
       </md-text-button>
     </div>
-    ${tabs}
-    ${body}
+    ${renderStatusSummary()}
+    ${renderDocument()}
   `;
 }
 
@@ -487,165 +742,246 @@ function summarizeProgress(review) {
   return progress;
 }
 
-function renderSection() {
-  const section = currentSection();
-  if (!section) return "<p>No sections.</p>";
-  const index = state.review.sections.findIndex((item) => item.id === section.id);
-  const status = sectionStatus(section.id);
+function statementCounts() {
+  let ready = 0;
+  let incomplete = 0;
+  let empty = 0;
+  let waived = 0;
+  for (const section of state.review?.sections || []) {
+    const statements = sectionStatements(section.id);
+    if (sectionStatus(section.id) === "no_restriction" && !statements.length) {
+      waived += 1;
+      continue;
+    }
+    if (!statements.length) {
+      empty += 1;
+      continue;
+    }
+    for (const item of statements) {
+      const status = statementStatus(item);
+      if (status === "ready") ready += 1;
+      else if (status === "incomplete") incomplete += 1;
+      else empty += 1;
+    }
+  }
+  return { ready, incomplete, empty, waived };
+}
+
+function renderStatusSummary() {
+  const counts = statementCounts();
+  const groups = (state.review.sections || [])
+    .map((section) => {
+      const statements = sectionStatements(section.id);
+      const status = sectionStatus(section.id);
+      let chips = "";
+      if (status === "no_restriction" && !statements.length) {
+        chips = `<button type="button" class="status-chip no_restriction ${section.id === state.sectionId ? "current" : ""}" data-jump-section="${escAttr(section.id)}" data-jump-stmt="">No restriction</button>`;
+      } else if (!statements.length) {
+        chips = `<button type="button" class="status-chip pending ${section.id === state.sectionId ? "current" : ""}" data-jump-section="${escAttr(section.id)}" data-jump-stmt="">No check yet</button>`;
+      } else {
+        chips = statements
+          .map((item, index) => {
+            const stmtStatus = statementStatus(item);
+            const current =
+              section.id === state.sectionId && index === state.statementFocus ? "current" : "";
+            const label = item.description?.trim() || item.id || `Statement ${index + 1}`;
+            return `<button type="button" class="status-chip ${stmtStatus} ${current}" data-jump-section="${escAttr(section.id)}" data-jump-stmt="${index}" title="${escAttr(label)}">${esc(labelStatementStatus(stmtStatus))} · ${esc(label)}</button>`;
+          })
+          .join("");
+      }
+      return `<div class="status-section">
+        <p class="status-section-title"><span class="badge ${status}">${labelStatus(status)}</span> ${esc(section.title)}</p>
+        <div class="status-chips">${chips}</div>
+      </div>`;
+    })
+    .join("");
   return `
-    <div class="nav-sections">
-      <md-outlined-button data-nav="-1" ${index === 0 ? "disabled" : ""}>Previous</md-outlined-button>
-      <strong>Section ${index + 1} / ${state.review.sections.length}</strong>
-      <md-outlined-button data-nav="1" ${index === state.review.sections.length - 1 ? "disabled" : ""}>Next</md-outlined-button>
-      <span class="badge ${status}">${labelStatus(status)}</span>
-      ${needsGeneration(section.id) ? `<span class="badge pending">Needs checks</span>` : ""}
-    </div>
-    <div class="split">
-      <section class="pane">
-        <header><h2>${esc(section.title)}</h2></header>
-        <div class="body md">${esc(section.markdown)}</div>
-      </section>
-      <section class="pane">
-        <header>
-          <h2>Closed checks for this section</h2>
-        </header>
-        <div class="body">
-          <p class="muted">These keys and statements should cover the obligations in the text. Edit them so they match human intent — you keep final say.</p>
-          ${state.keys.map((key, i) => renderKeyCard(key, i)).join("")}
-          <md-outlined-button id="add-key">Add key</md-outlined-button>
-          ${state.statements.map((item, i) => renderStatementCard(item, i)).join("")}
-          <md-outlined-button id="add-statement">Add statement</md-outlined-button>
-          <div class="actions">
-            <md-filled-button id="save-section" ${state.busy ? "disabled" : ""}>Save checks</md-filled-button>
-            <md-outlined-button id="ask-ai" ${state.busy ? "disabled" : ""}>Ask AI</md-outlined-button>
-            <md-filled-tonal-button id="mark-covered" ${state.busy ? "disabled" : ""}>Mark exhaustively covered</md-filled-tonal-button>
-            <md-text-button id="mark-waived" ${state.busy ? "disabled" : ""}>No concrete restriction</md-text-button>
-          </div>
+    <section class="status-summary" id="status-summary">
+      <div class="status-summary-head">
+        <div>
+          <h2>All checks</h2>
+          <p class="muted">Every closed statement in this ${esc(state.review?.domain || "regulation")}. Click one to jump to that article.</p>
         </div>
-      </section>
+        <div class="status-summary-counts">
+          <span class="status-count ready">${counts.ready} ready</span>
+          <span class="status-count incomplete">${counts.incomplete} need details</span>
+          <span class="status-count pending">${counts.empty} empty</span>
+          ${counts.waived ? `<span class="status-count waived">${counts.waived} no restriction</span>` : ""}
+        </div>
+      </div>
+      ${groups}
+    </section>`;
+}
+
+function renderDocSection(section) {
+  const status = sectionStatus(section.id);
+  const selected = section.id === state.sectionId;
+  return `
+    <section class="doc-section ${status}${selected ? " selected" : ""}" id="block-${section.id}" data-section="${escAttr(section.id)}">
+      <h2 class="doc-section-title"${selected ? ' data-tour="source-text"' : ""}>
+        ${esc(section.title)}
+        <span class="badge ${status}">${labelStatus(status)}</span>
+        ${needsGeneration(section.id) ? `<span class="badge pending">Needs checks</span>` : ""}
+      </h2>
+      <div class="md">${esc(section.markdown)}</div>
+    </section>`;
+}
+
+function renderKeyReadout(item, index) {
+  const status = statementStatus(item);
+  const focused = index === state.statementFocus ? "focused" : "";
+  const keys = (item.keys || [])
+    .map((key) => {
+      const accepted = new Set(key.accepted || []);
+      const chips = (key.value_enum || [])
+        .map((value) => {
+          const label = value === "" ? "(empty)" : value;
+          const pass = accepted.has(value);
+          return `<span class="${pass ? "accept-chip" : "enum-chip"}">${esc(label)}</span>`;
+        })
+        .join("");
+      const acceptedList = (key.accepted || [])
+        .map((value) => `<span class="accept-chip">${esc(value === "" ? "(empty)" : value)}</span>`)
+        .join("");
+      return `<div class="inspector-key">
+        <p class="inspector-key-id">${esc(key.id || "key")}${key.required ? " · required" : ""}</p>
+        <p class="inspector-question">${esc(key.question || "No question yet")}</p>
+        <p class="muted" style="margin:0.35rem 0 0.2rem">Accepted (pass)</p>
+        <div class="chips">${acceptedList || "<span class='muted'>None yet</span>"}</div>
+        <p class="muted" style="margin:0.45rem 0 0.2rem">Possible values</p>
+        <div class="chips">${chips || "<span class='muted'>None yet</span>"}</div>
+      </div>`;
+    })
+    .join("");
+  return `
+    <article class="inspector-stmt ${focused}" id="inspect-stmt-${escAttr(state.sectionId)}-${index}"${index === 0 ? ' data-tour="closed-check"' : ""}>
+      <div class="inspector-stmt-head">
+        <span class="badge ${status}">${labelStatementStatus(status)}</span>
+        <strong>${esc(item.description?.trim() || item.id || `Statement ${index + 1}`)}</strong>
+      </div>
+      ${keys || "<p class='muted'>No keys on this statement yet.</p>"}
+    </article>`;
+}
+
+function renderInspector() {
+  const section = currentSection();
+  if (!section) {
+    return `<h2>Closed checks</h2><p class="muted">Click an article in the document. Projects are measured against these values, not the paragraph.</p>`;
+  }
+  const status = sectionStatus(section.id);
+  const statements = sectionStatements(section.id);
+  const index = sectionIndex();
+  const total = state.review.sections.length;
+  const incomplete = statements.some((item) => statementStatus(item) !== "ready");
+  let body = "";
+  if (status === "no_restriction" && !statements.length) {
+    body = `<p class="stmt-nav-empty"><span class="badge no_restriction">No restriction</span> This article has no closed check — it does not constrain the project.</p>`;
+  } else if (!statements.length) {
+    body = `<p class="stmt-nav-empty muted">No statements yet. Add one to turn this article into a closed check a project can fail or pass.</p>`;
+  } else {
+    body = statements.map((item, stmtIndex) => renderKeyReadout(item, stmtIndex)).join("");
+  }
+  return `
+    <div class="inspector-nav">
+      <button type="button" class="nav-chip" id="prev-section" ${index === 0 ? "disabled" : ""}>Previous</button>
+      <strong id="section-pos">Article ${total ? index + 1 : 0} / ${total}</strong>
+      <button type="button" class="nav-chip" id="next-section" ${index >= total - 1 ? "disabled" : ""}>Next</button>
     </div>
+    <h2>Closed checks</h2>
+    <p class="muted">Questions and accepted answers for this article. The comparator uses these values — not the model, and not the prose.</p>
+    <p class="sidebar-section-title"><span class="badge ${status}">${labelStatus(status)}</span> ${esc(section.title)}</p>
+    ${body}
+    <div class="actions" data-tour="final-say">
+      <md-filled-button type="button" data-save-sec="${escAttr(section.id)}" title="Save the closed questions and pass list" ${state.busy ? "disabled" : ""}>Save checks</md-filled-button>
+      <md-filled-tonal-button type="button" data-cover-sec="${escAttr(section.id)}" title="Human final say: this check matches the article" ${state.busy ? "disabled" : ""}>Mark as covered</md-filled-tonal-button>
+      <md-text-button type="button" data-waive-sec="${escAttr(section.id)}" title="This article does not impose a checkable restriction" ${state.busy ? "disabled" : ""}>No restriction in this article</md-text-button>
+    </div>
+    <details class="edit-checks"${incomplete ? " open" : ""}>
+      <summary>Edit this check</summary>
+      ${statements.map((item, stmtIndex) => renderStatementCard(section.id, item, stmtIndex)).join("")}
+      <md-outlined-button type="button" data-add-stmt="${escAttr(section.id)}">Add statement</md-outlined-button>
+    </details>
   `;
 }
 
-function renderKeyCard(key, index) {
+function renderNestedKey(sectionId, stmtIndex, key, keyIndex) {
   const chips = (key.value_enum || [])
     .map(
       (value, enumIndex) =>
-        `<md-input-chip label="${escAttr(value === "" ? "(empty)" : value)}" data-del-enum="${index}:${enumIndex}"></md-input-chip>`
+        `<md-input-chip label="${escAttr(value === "" ? "(empty)" : value)}" data-del-enum="${escAttr(sectionId)}:${stmtIndex}:${keyIndex}:${enumIndex}"></md-input-chip>`
     )
     .join("");
+  const accepted = key.accepted || [];
+  const boxes = (key.value_enum || [])
+    .map((value) => {
+      const checked = accepted.includes(value) ? "checked" : "";
+      const label = value === "" ? "(empty)" : value;
+      return `<label><md-checkbox data-sid="${escAttr(sectionId)}" data-si="${stmtIndex}" data-ki="${keyIndex}" data-accepted-value="${escAttr(value)}" ${checked}></md-checkbox> ${esc(label)}</label>`;
+    })
+    .join("");
   return `
-    <article class="card" data-key="${index}">
-      <h3>Key</h3>
-      <div class="field"><md-outlined-text-field label="Id" data-key-field="id" data-i="${index}" value="${escAttr(key.id)}"></md-outlined-text-field></div>
-      <div class="field"><md-outlined-text-field label="Question" data-key-field="question" data-i="${index}" value="${escAttr(key.question)}"></md-outlined-text-field></div>
-      <div class="field"><md-outlined-text-field type="textarea" rows="3" label="Explanation" data-key-field="explanation" data-i="${index}" value="${escAttr(key.explanation)}"></md-outlined-text-field></div>
+    <article class="key-card">
+      <h4>Question</h4>
+      <div class="field"><md-outlined-text-field label="Key id" data-sid="${escAttr(sectionId)}" data-si="${stmtIndex}" data-ki="${keyIndex}" data-key-field="id" value="${escAttr(key.id)}"></md-outlined-text-field></div>
+      <div class="field"><md-outlined-text-field label="Question" data-sid="${escAttr(sectionId)}" data-si="${stmtIndex}" data-ki="${keyIndex}" data-key-field="question" value="${escAttr(key.question)}"></md-outlined-text-field></div>
+      <div class="field"><md-outlined-text-field type="textarea" rows="3" label="Explanation" data-sid="${escAttr(sectionId)}" data-si="${stmtIndex}" data-ki="${keyIndex}" data-key-field="explanation" value="${escAttr(key.explanation)}"></md-outlined-text-field></div>
       <div class="field">
-        <p class="muted" style="margin:0 0 0.35rem">Value enum</p>
+        <p class="muted" style="margin:0 0 0.35rem">Possible values</p>
         <div class="chips">${chips}</div>
         <div class="enum-row">
-          <md-outlined-text-field data-enum-input="${index}" label="Add enum value"></md-outlined-text-field>
-          <md-text-button type="button" data-add-enum="${index}">Add</md-text-button>
+          <md-outlined-text-field data-enum-input="${escAttr(sectionId)}:${stmtIndex}:${keyIndex}" label="Add possible value"></md-outlined-text-field>
+          <md-text-button type="button" data-add-enum="${escAttr(sectionId)}:${stmtIndex}:${keyIndex}">Add</md-text-button>
         </div>
       </div>
-      <label class="muted"><md-checkbox data-key-field="required" data-i="${index}" ${key.required ? "checked" : ""}></md-checkbox> Required</label>
-      <div class="actions"><md-text-button data-remove-key="${index}">Remove key</md-text-button></div>
+      <div class="field">
+        <p class="muted" style="margin:0 0 0.35rem">Accepted values (pass)</p>
+        <div class="accepted-grid">${boxes || "<span class='muted'>Add a possible value first.</span>"}</div>
+      </div>
+      <label class="muted"><md-checkbox data-sid="${escAttr(sectionId)}" data-si="${stmtIndex}" data-ki="${keyIndex}" data-key-field="required" ${key.required ? "checked" : ""}></md-checkbox> Required</label>
+      <div class="actions"><md-text-button data-remove-key="${escAttr(sectionId)}:${stmtIndex}:${keyIndex}">Remove question</md-text-button></div>
     </article>
   `;
 }
 
-function renderStatementCard(item, index) {
-  const keyOptions = state.keys
-    .map((key) => {
-      const selected = item.accepted?.[key.id] || [];
-      const boxes = (key.value_enum || [])
-        .map((value) => {
-          const checked = selected.includes(value) ? "checked" : "";
-          const label = value === "" ? "(empty)" : value;
-          return `<label><md-checkbox data-accepted="${index}:${escAttr(key.id)}:${escAttr(value)}" ${checked}></md-checkbox> ${esc(label)}</label>`;
-        })
-        .join("");
-      return `<div><strong>${esc(key.id)}</strong><div class="accepted-grid">${boxes || "<span class='muted'>Add enum values on the key first.</span>"}</div></div>`;
-    })
+function renderStatementCard(sectionId, item, index) {
+  const keys = (item.keys || [])
+    .map((key, keyIndex) => renderNestedKey(sectionId, index, key, keyIndex))
     .join("");
+  const focused = sectionId === state.sectionId && index === state.statementFocus ? "focused" : "";
+  const status = statementStatus(item);
   return `
-    <article class="card">
-      <h3>Statement</h3>
-      <div class="field"><md-outlined-text-field label="Id" data-stmt-field="id" data-i="${index}" value="${escAttr(item.id)}"></md-outlined-text-field></div>
-      <div class="field"><md-outlined-text-field type="textarea" rows="2" label="Description" data-stmt-field="description" data-i="${index}" value="${escAttr(item.description)}"></md-outlined-text-field></div>
-      <p class="muted">Accepted values that constitute a pass</p>
-      ${keyOptions || "<p class='muted'>Add a key first.</p>"}
-      <div class="actions"><md-text-button data-remove-stmt="${index}">Remove statement</md-text-button></div>
+    <article class="card statement-card ${focused}" id="stmt-card-${escAttr(sectionId)}-${index}"${sectionId === state.sectionId && index === 0 ? ' data-tour="closed-check"' : ""}>
+      <div class="statement-card-head">
+        <h3>Statement</h3>
+        <span class="badge ${status}">${labelStatementStatus(status)}</span>
+      </div>
+      <div class="field"><md-outlined-text-field label="Id" data-sid="${escAttr(sectionId)}" data-si="${index}" data-stmt-field="id" value="${escAttr(item.id)}"></md-outlined-text-field></div>
+      <div class="field"><md-outlined-text-field type="textarea" rows="2" label="Statement" data-sid="${escAttr(sectionId)}" data-si="${index}" data-stmt-field="description" value="${escAttr(item.description)}"></md-outlined-text-field></div>
+      ${keys || "<p class='muted'>Add a question so this statement can be checked.</p>"}
+      <div class="actions">
+        <md-outlined-button type="button" data-add-key="${escAttr(sectionId)}:${index}">Add question</md-outlined-button>
+        <md-text-button type="button" data-remove-stmt="${escAttr(sectionId)}:${index}">Remove statement</md-text-button>
+      </div>
     </article>
   `;
 }
 
 function renderDocument() {
-  const pending = state.review.sections.filter((item) => sectionStatus(item.id) === "pending");
-  const sidebar = pending.length
-    ? pending
-        .map(
-          (item) =>
-            `<md-text-button data-jump="${item.id}">${esc(item.title)}</md-text-button>`
-        )
-        .join("")
-    : "<p class='muted'>Every section has been reviewed.</p>";
-  const blocks = state.review.sections
-    .map((section) => {
-      const status = sectionStatus(section.id);
-      return `
-        <article class="section-block ${status}" id="block-${section.id}">
-          <header>
-            <h2 style="margin:0;font-size:1rem">${esc(section.title)}</h2>
-            <span class="badge ${status}">${labelStatus(status)}</span>
-            ${needsGeneration(section.id) ? `<span class="badge pending">Needs checks</span>` : ""}
+  const review = state.review;
+  const sections = (review.sections || []).map((section) => renderDocSection(section)).join("");
+  return `
+    <div class="doc-shell">
+      <div class="doc-canvas">
+        <article class="doc-paper" id="doc-paper">
+          <header class="doc-paper-head">
+            <p class="doc-kicker">${esc(review.domain || "Regulation")} · ${esc(review.filename || review.source_md || "Markdown")}</p>
+            <h1>${esc(review.document.meta.title)}</h1>
+            <p class="muted">${esc(policyStory(review) || "Click an article. Closed questions and accepted answers for that section appear on the right.")}</p>
           </header>
-          <div class="md">${esc(section.markdown)}</div>
-          <div class="actions" style="padding:0 1rem 0.9rem">
-            <md-outlined-button data-review-sec="${section.id}">Review this section</md-outlined-button>
-            <md-text-button data-waive-sec="${section.id}">No concrete restriction</md-text-button>
-            <md-outlined-button data-ai-sec="${section.id}">Ask AI</md-outlined-button>
-          </div>
-        </article>`;
-    })
-    .join("");
-  return `
-    <div class="doc-layout">
-      <aside class="sidebar">
-        <h2>Not yet reviewed</h2>
-        ${sidebar}
-      </aside>
-      <div>${blocks}</div>
-    </div>
-  `;
-}
-
-function renderHistory() {
-  const versions = [...(state.review.versions || [])].sort((a, b) => b.version - a.version);
-  const rows = versions
-    .map((item) => {
-      const changed = (item.changed_section_ids || []).length
-        ? `${item.changed_section_ids.length} changed section(s)`
-        : "no section diffs recorded";
-      const active = state.versionPreview?.version === item.version ? "active" : "";
-      return `
-        <button class="version-row ${active}" data-version="${item.version}">
-          <strong>v${item.version}</strong>
-          <span>${esc(item.action)} · ${esc(item.filename)}</span>
-          <span class="muted">${esc(item.created_at)} · ${esc(changed)}</span>
-        </button>`;
-    })
-    .join("");
-  const preview = state.versionPreview
-    ? `<section class="pane"><header><h2>v${state.versionPreview.version} source</h2></header><div class="body md">${esc(state.versionPreview.markdown)}</div></section>`
-    : `<p class="muted">Select a version to view the Markdown snapshot stored in this document repo.</p>`;
-  return `
-    <div class="doc-layout">
-      <aside class="sidebar">
-        <h2>Versions</h2>
-        ${rows || "<p class='muted'>No snapshots yet.</p>"}
-      </aside>
-      <div>${preview}</div>
+          ${sections || "<p class='muted'>No sections.</p>"}
+        </article>
+      </div>
+      <aside class="doc-inspector" id="statement-sidebar">${renderInspector()}</aside>
     </div>
   `;
 }
@@ -653,69 +989,70 @@ function renderHistory() {
 function bindReview() {
   bindDeleteButtons();
   document.getElementById("sync-policies")?.addEventListener("click", () => syncPolicies(state.review.id, false));
-  document.querySelectorAll("[data-version]").forEach((button) => {
-    button.addEventListener("click", () => loadVersion(Number(button.dataset.version)));
+  document.getElementById("doc-paper")?.addEventListener("click", (event) => {
+    const section = event.target.closest("[data-section]");
+    if (!section) return;
+    showSection(section.dataset.section, true);
+    setHash(state.review.id, section.dataset.section);
   });
-  document.getElementById("export-cli")?.addEventListener("click", async () => {
-    try {
-      const result = await api(`/api/reviews/${state.review.id}/export`);
-      state.error = "";
-      toast(`Wrote ${result.path}`);
-    } catch (err) {
-      state.error = err.message;
-      render();
-    }
+  document.getElementById("status-summary")?.addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-jump-section]");
+    if (!chip) return;
+    showSection(chip.dataset.jumpSection, true);
+    if (chip.dataset.jumpStmt !== "") focusStatement(Number(chip.dataset.jumpStmt));
+    setHash(state.review.id, chip.dataset.jumpSection);
   });
-  document.getElementById("review-tabs")?.addEventListener("change", (event) => {
-    const names = ["section", "document", "history"];
-    const index = event.target.activeTabIndex;
-    setHash(state.review.id, names[index] || "section", state.sectionId);
-  });
-  document.querySelectorAll("[data-nav]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = state.review.sections.findIndex((item) => item.id === state.sectionId);
-      const next = state.review.sections[index + Number(button.dataset.nav)];
-      if (next) setHash(state.review.id, "section", next.id);
-    });
-  });
-  document.querySelectorAll("[data-jump]").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.getElementById(`block-${button.dataset.jump}`)?.scrollIntoView({ behavior: "smooth" });
-    });
-  });
-  document.querySelectorAll("[data-review-sec]").forEach((button) => {
-    button.addEventListener("click", () => setHash(state.review.id, "section", button.dataset.reviewSec));
-  });
+  bindInspector();
+}
+
+function bindInspector() {
+  document.getElementById("prev-section")?.addEventListener("click", () => stepSection(-1));
+  document.getElementById("next-section")?.addEventListener("click", () => stepSection(1));
   document.querySelectorAll("[data-waive-sec]").forEach((button) => {
     button.addEventListener("click", () => setStatus(button.dataset.waiveSec, "no_restriction"));
   });
-  document.querySelectorAll("[data-ai-sec]").forEach((button) => {
-    button.addEventListener("click", () => generateSection(button.dataset.aiSec, true));
+  document.querySelectorAll("[data-save-sec]").forEach((button) => {
+    button.addEventListener("click", () => saveSection(button.dataset.saveSec));
   });
-  document.getElementById("add-key")?.addEventListener("click", () => {
-    state.keys.push({
-      id: `key_${state.keys.length + 1}`,
-      question: "",
-      explanation: "",
-      value_enum: ["yes", "no", ""],
-      required: true,
-      source_section_id: state.sectionId,
+  document.querySelectorAll("[data-cover-sec]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const sectionId = button.dataset.coverSec;
+      await saveSection(sectionId);
+      if (!state.error) await setStatus(sectionId, "covered");
     });
-    render();
   });
-  document.getElementById("add-statement")?.addEventListener("click", () => {
-    const first = state.keys[0]?.id;
-    state.statements.push({
-      id: `stmt_${state.statements.length + 1}`,
-      description: "",
-      accepted: first ? { [first]: [] } : {},
-      source_section_id: state.sectionId,
+  document.querySelectorAll("[data-add-stmt]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const sectionId = button.dataset.addStmt;
+      const statements = sectionStatements(sectionId);
+      statements.push({
+        id: `stmt_${statements.length + 1}`,
+        description: "",
+        source_section_id: sectionId,
+        keys: [blankKey(1)],
+      });
+      state.statementFocus = statements.length - 1;
+      render();
     });
-    render();
+  });
+  document.querySelectorAll("[data-add-key]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const [sectionId, stmtIndex] = splitIndex(button.dataset.addKey);
+      const stmt = sectionStatements(sectionId)[stmtIndex];
+      stmt.keys = stmt.keys || [];
+      stmt.keys.push(blankKey(stmt.keys.length + 1));
+      render();
+    });
+  });
+  document.querySelectorAll("[data-stmt-field]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const stmt = sectionStatements(input.dataset.sid)[Number(input.dataset.si)];
+      if (stmt) stmt[input.dataset.stmtField] = input.value;
+    });
   });
   document.querySelectorAll("[data-key-field]").forEach((input) => {
     const apply = () => {
-      const key = state.keys[Number(input.dataset.i)];
+      const key = sectionStatements(input.dataset.sid)[Number(input.dataset.si)]?.keys?.[Number(input.dataset.ki)];
       if (!key) return;
       if (input.dataset.keyField === "required") key.required = Boolean(input.checked);
       else key[input.dataset.keyField] = input.value;
@@ -723,26 +1060,26 @@ function bindReview() {
     input.addEventListener("input", apply);
     input.addEventListener("change", apply);
   });
-  document.querySelectorAll("[data-stmt-field]").forEach((input) => {
-    input.addEventListener("input", () => {
-      state.statements[Number(input.dataset.i)][input.dataset.stmtField] = input.value;
-    });
-  });
   document.querySelectorAll("[data-add-enum]").forEach((button) => {
     button.addEventListener("click", () => {
-      const index = Number(button.dataset.addEnum);
-      const field = document.querySelector(`[data-enum-input="${index}"]`);
+      const [sectionId, stmtIndex, keyIndex] = splitIndex(button.dataset.addEnum);
+      const key = sectionStatements(sectionId)[stmtIndex]?.keys?.[keyIndex];
+      const field = document.querySelector(`[data-enum-input="${button.dataset.addEnum}"]`);
       const value = field?.value ?? "";
-      state.keys[index].value_enum = state.keys[index].value_enum || [];
-      state.keys[index].value_enum.push(value);
-      field.value = "";
+      if (!key) return;
+      key.value_enum = key.value_enum || [];
+      key.value_enum.push(value);
+      if (field) field.value = "";
       render();
     });
   });
   document.querySelectorAll("[data-del-enum]").forEach((button) => {
     const remove = () => {
-      const [keyIndex, enumIndex] = button.dataset.delEnum.split(":").map(Number);
-      state.keys[keyIndex].value_enum.splice(enumIndex, 1);
+      const [sectionId, stmtIndex, keyIndex, enumIndex] = splitIndex(button.dataset.delEnum);
+      const key = sectionStatements(sectionId)[stmtIndex]?.keys?.[keyIndex];
+      if (!key) return;
+      const [removed] = key.value_enum.splice(Number(enumIndex), 1);
+      key.accepted = (key.accepted || []).filter((value) => value !== removed);
       render();
     };
     button.addEventListener("remove", remove);
@@ -750,95 +1087,65 @@ function bindReview() {
   });
   document.querySelectorAll("[data-remove-key]").forEach((button) => {
     button.addEventListener("click", () => {
-      const index = Number(button.dataset.removeKey);
-      const removed = state.keys.splice(index, 1)[0];
-      state.statements.forEach((item) => {
-        delete item.accepted[removed.id];
-      });
+      const [sectionId, stmtIndex, keyIndex] = splitIndex(button.dataset.removeKey);
+      const stmt = sectionStatements(sectionId)[stmtIndex];
+      stmt?.keys?.splice(keyIndex, 1);
       render();
     });
   });
   document.querySelectorAll("[data-remove-stmt]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.statements.splice(Number(button.dataset.removeStmt), 1);
+      const [sectionId, stmtIndex] = splitIndex(button.dataset.removeStmt);
+      const list = sectionStatements(sectionId);
+      list.splice(stmtIndex, 1);
+      state.statementFocus = Math.min(state.statementFocus, Math.max(0, list.length - 1));
       render();
     });
   });
-  document.querySelectorAll("[data-accepted]").forEach((input) => {
+  document.querySelectorAll("[data-accepted-value]").forEach((input) => {
     input.addEventListener("change", () => {
-      const [stmtIndex, keyId, value] = splitAccepted(input.dataset.accepted);
-      const stmt = state.statements[stmtIndex];
-      stmt.accepted[keyId] = stmt.accepted[keyId] || [];
-      if (input.checked && !stmt.accepted[keyId].includes(value)) stmt.accepted[keyId].push(value);
-      if (!input.checked) stmt.accepted[keyId] = stmt.accepted[keyId].filter((item) => item !== value);
+      const key = sectionStatements(input.dataset.sid)[Number(input.dataset.si)]?.keys?.[Number(input.dataset.ki)];
+      if (!key) return;
+      const value = input.dataset.acceptedValue;
+      key.accepted = key.accepted || [];
+      if (input.checked && !key.accepted.includes(value)) key.accepted.push(value);
+      if (!input.checked) key.accepted = key.accepted.filter((item) => item !== value);
     });
   });
-  document.getElementById("save-section")?.addEventListener("click", saveSection);
-  document.getElementById("ask-ai")?.addEventListener("click", () => generateSection(state.sectionId, false));
-  document.getElementById("mark-covered")?.addEventListener("click", async () => {
-    await saveSection();
-    await setStatus(state.sectionId, "covered");
-  });
-  document.getElementById("mark-waived")?.addEventListener("click", () => setStatus(state.sectionId, "no_restriction"));
 }
 
-function splitAccepted(raw) {
-  const [stmtIndex, ...rest] = raw.split(":");
-  const value = rest.pop();
-  const keyId = rest.join(":");
-  return [Number(stmtIndex), keyId, value];
+function splitIndex(raw) {
+  return String(raw || "").split(":").map((part, index) => (index === 0 ? part : Number(part)));
 }
 
-async function saveSection() {
+async function saveSection(sectionId) {
   state.busy = true;
   state.error = "";
   showProgress(true);
   try {
-    const statements = state.statements.map((item) => ({
+    const statements = sectionStatements(sectionId).map((item) => ({
       ...item,
-      accepted: Object.fromEntries(
-        Object.entries(item.accepted || {}).filter(([, values]) => values.length)
-      ),
-      source_section_id: state.sectionId,
+      source_section_id: sectionId,
+      keys: (item.keys || []).map((key) => ({
+        ...key,
+        accepted: key.accepted || [],
+        value_enum: key.value_enum || [],
+      })),
     }));
-    const emptyAccepted = statements.find((item) => !Object.keys(item.accepted).length);
+    const emptyKeys = statements.find((item) => !item.keys.length);
+    if (emptyKeys) throw new Error(`Statement ${emptyKeys.id} needs at least one question.`);
+    const emptyAccepted = statements.find((item) => item.keys.some((key) => !key.accepted.length));
     if (emptyAccepted) {
       throw new Error(`Statement ${emptyAccepted.id} needs at least one accepted value.`);
     }
-    const keys = state.keys.map((key) => ({
-      ...key,
-      source_section_id: key.source_section_id || state.sectionId,
-    }));
-    const emptyEnum = keys.find((key) => !key.value_enum?.length);
-    if (emptyEnum) throw new Error(`Key ${emptyEnum.id} needs at least one enum value.`);
-    const review = await api(`/api/reviews/${state.review.id}/sections/${state.sectionId}`, {
+    const emptyEnum = statements.flatMap((item) => item.keys).find((key) => !key.value_enum.length);
+    if (emptyEnum) throw new Error(`Key ${emptyEnum.id} needs at least one possible value.`);
+    const review = await api(`/api/reviews/${state.review.id}/sections/${sectionId}`, {
       method: "PATCH",
-      body: JSON.stringify({ keys, statements }),
+      body: JSON.stringify({ statements }),
     });
     state.review = review;
-    pullDraft();
-  } catch (err) {
-    state.error = err.message;
-  } finally {
-    state.busy = false;
-    render();
-  }
-}
-
-async function generateSection(sectionId, stayOnDocument) {
-  state.busy = true;
-  state.error = "";
-  showProgress(true);
-  try {
-    const review = await api(`/api/reviews/${state.review.id}/sections/${sectionId}/generate`, {
-      method: "POST",
-      body: "{}",
-    });
-    state.review = review;
-    state.sectionId = sectionId;
-    pullDraft();
-    if (stayOnDocument) setHash(review.id, "document", sectionId);
-    else setHash(review.id, "section", sectionId);
+    delete state.drafts[sectionId];
   } catch (err) {
     state.error = err.message;
   } finally {
@@ -857,7 +1164,7 @@ async function setStatus(sectionId, status) {
       body: JSON.stringify({ status }),
     });
     state.review = review;
-    pullDraft();
+    delete state.drafts[sectionId];
   } catch (err) {
     state.error = err.message;
   } finally {
@@ -881,7 +1188,7 @@ async function syncPolicies(reviewId, stayOnList) {
     const errors = result.errors || [];
     const remaining = result.remaining || 0;
     let notice = generated.length
-      ? `Updated checks for ${generated.length} section(s). Saved closed JSON to data/policies/${reviewId}.json.`
+      ? `Updated closed checks for ${generated.length} section(s). Saved JSON to data/policies/${reviewId}.json — this is what projects are compared against.`
       : "No sections needed generation.";
     if (remaining) {
       notice += ` ${remaining} still waiting — click Generate policies again for the next batch.`;
@@ -896,7 +1203,7 @@ async function syncPolicies(reviewId, stayOnList) {
     state.notice = notice;
     if (errors.length) state.error = errors.join("; ");
     state.review = result;
-    pullDraft();
+    state.drafts = {};
   } catch (err) {
     state.error = err.message;
     state.notice = "";
@@ -904,16 +1211,6 @@ async function syncPolicies(reviewId, stayOnList) {
     state.busy = false;
     render();
   }
-}
-
-async function loadVersion(version) {
-  try {
-    state.versionPreview = await api(`/api/reviews/${state.review.id}/versions/${version}`);
-    state.error = "";
-  } catch (err) {
-    state.error = err.message;
-  }
-  render();
 }
 
 function needsGeneration(sectionId) {
@@ -929,8 +1226,12 @@ function setHealthHash(runId, filter) {
 }
 
 function pickDefaultHealthId(runs) {
-  const demo = runs.find((item) => item.kind === "demo") || runs[0];
-  return demo?.id || "";
+  const visible = window.PoliviewDemo ? window.PoliviewDemo.filterHealth(runs) : runs;
+  if (window.PoliviewDemo?.enabled()) {
+    const demo = visible.find((item) => item.kind === "demo") || visible[0];
+    return demo?.id || "";
+  }
+  return visible[0]?.id || "";
 }
 
 async function loadHealth(runId, filter) {
@@ -939,7 +1240,7 @@ async function loadHealth(runId, filter) {
     return;
   }
   const data = await api("/api/health/runs");
-  const runs = data.runs || [];
+  const runs = window.PoliviewDemo ? window.PoliviewDemo.filterHealth(data.runs || []) : data.runs || [];
   const selected = runId && runs.some((item) => item.id === runId) ? runId : pickDefaultHealthId(runs);
   state.view = "health";
   state.healthRuns = runs;
@@ -949,7 +1250,7 @@ async function loadHealth(runId, filter) {
   if (!selected) {
     state.health = null;
     state.error = "";
-    subtitleEl.textContent = "Project compliance · no health checks yet";
+    subtitleEl.textContent = "Project owner · compliance health";
     document.title = `${PRODUCT} · Compliance health`;
     render();
     return;
@@ -971,6 +1272,14 @@ async function loadHealth(runId, filter) {
 
 function renderHealth(options = {}) {
   const embedded = Boolean(options.embedded);
+  if (embedded && !hasCheckedHealth()) {
+    return `
+      <section class="health-page embedded health-pending">
+        <p class="eyebrow">Project owner</p>
+        <h1>Compliance health</h1>
+        <p class="muted">No results yet. Starter files are project metadata only. Click <strong>Check compliance</strong> to fill answers from those files and the sample GDPR / EU AI Act keys. The comparator — not the model — picks pass, fail, or missing info.</p>
+      </section>`;
+  }
   const snapshot = state.health;
   const option = (item) => {
       const selected = item.id === state.healthId ? "selected" : "";
@@ -992,10 +1301,10 @@ function renderHealth(options = {}) {
           <div>
             <p class="eyebrow">Project owner</p>
             <h1>Compliance health</h1>
-            <p class="muted">This page attaches to a project. For the demo, pick a stored result.</p>
+            <p class="muted">Results for a shipment against the closed GDPR and EU AI Act checks: fail, why, what to do, who to contact.</p>
           </div>
         </div>
-        <p class="muted">No health-check results found. Run <code>python main.py check</code> or keep the demo file in <code>examples/health</code>.</p>
+        <p class="muted">No health-check results found. Open GrowthBoard from <strong>Project owner → Workspace</strong>, or turn <strong>Demo</strong> on.</p>
       </section>`;
   }
   const filter = state.healthFilter;
@@ -1013,7 +1322,7 @@ function renderHealth(options = {}) {
   const picker = embedded
     ? ""
     : `<div class="field health-run-picker">
-          <md-outlined-select id="health-run" label="Results (demo picker)">${optionsHtml}</md-outlined-select>
+          <md-outlined-select id="health-run" label="Stored results">${optionsHtml}</md-outlined-select>
         </div>`;
   return `
     ${banners()}
@@ -1022,9 +1331,13 @@ function renderHealth(options = {}) {
         <div>
           <p class="eyebrow">Project owner</p>
           <h1>Compliance health</h1>
-          <p class="muted">${esc(snapshot.project_name || "Untitled project")}${snapshot.project_source ? ` · ${esc(snapshot.project_source)}` : ""}</p>
+          <p class="muted">${esc(snapshot.project_name || "Untitled project")} · ${esc((snapshot.policies || []).map((item) => item.domain).filter(Boolean).join(" + ") || "closed GDPR and EU AI Act checks")}</p>
         </div>
         ${picker}
+        ${futureHit(
+          `<md-outlined-button disabled title="Export is not in this demo"><md-icon slot="icon">download</md-icon>Export report</md-outlined-button>`,
+          "stakeholders could receive this GDPR / EU AI Act report without another meeting."
+        )}
       </div>
       <div class="health-meta">
         <div><span class="meta-label">Last validated</span><strong>${esc(formatWhen(snapshot.validated_at))}</strong></div>
@@ -1034,7 +1347,7 @@ function renderHealth(options = {}) {
         <div><span class="meta-label">Missing info</span><strong>${totals.missing}</strong></div>
         <div><span class="meta-label">Policies in scope</span><strong>${(snapshot.policies || []).length}</strong></div>
       </div>
-      <div class="health-overview">
+      <div class="health-overview" data-tour="health">
         <article class="donut-card featured">
           <h2>Overall</h2>
           ${donutChart(totals, "Overall pass rate")}
@@ -1048,7 +1361,7 @@ function renderHealth(options = {}) {
           <md-secondary-tab ${failedOnly ? "active" : ""}>Failed only</md-secondary-tab>
           <md-secondary-tab ${failedOnly ? "" : "active"}>All checks</md-secondary-tab>
         </md-tabs>
-        <p class="muted">${failedOnly ? "Showing failed checks. Switch to all checks to include passes and missing information." : "Showing every check that applies to this project."}</p>
+        <p class="muted">${failedOnly ? "Failed GDPR and EU AI Act checks first. Open All checks for passes and missing information." : "Every closed check that applies to this project, including passes."}</p>
       </div>
       ${failedOnly && totals.failed === 0 ? `<div class="banner success"><md-icon>check_circle</md-icon><span>No failed checks on this health run.${totals.missing ? " Some checks still need information — open All checks." : ""}</span></div>` : ""}
       <div class="policy-list">${policies}</div>
@@ -1064,11 +1377,11 @@ function renderPolicyDonut(policy) {
     pass_pct: policy.pass_pct || 0,
   };
   return `
-    <article class="donut-card">
+    <article class="donut-card" data-tour="health-${escAttr(policy.policy_id || policy.domain)}">
       <h2>${esc(policy.domain || policy.title)}</h2>
       ${donutChart(counts, `${policy.title} pass rate`)}
       <p class="donut-caption">${counts.passed}/${counts.total} passed</p>
-      <p class="muted donut-org">${esc(policy.organization || policy.title)}</p>
+      <p class="muted donut-org">${esc(policyStory(policy) || policy.organization || policy.title)}</p>
     </article>`;
 }
 
@@ -1142,7 +1455,7 @@ function renderHealthPolicy(policy, failedOnly) {
         </span>
       </summary>
       <div class="policy-acc-body">
-        <p class="muted">${owners ? `Policy contacts: ${esc(owners)}` : ""}</p>
+        <p class="muted">${owners ? `Policy contacts: ${esc(owners)}` : "No policy contacts listed."}</p>
         ${checks}
       </div>
     </details>`;
@@ -1192,13 +1505,17 @@ function renderHealthCheck(item, policy) {
         <section>
           <h4>Who to contact</h4>
           <ul class="contact-list">${contacts || "<li class='muted'>No policy owners listed.</li>"}</ul>
+          ${futureHit(
+          `<md-filled-tonal-button disabled title="Notify owner is not in this demo"><md-icon slot="icon">notifications</md-icon>Notify owner</md-filled-tonal-button>`,
+          "a failed transfer or missing human-oversight check could open a ticket with the DPO or AI Act officer without leaving this report."
+          )}
         </section>
       </div>`
     : `
       <p>${esc(item.why || item.detail || "This check passed.")}</p>
       ${answers ? `<ul class="answer-list">${answers}</ul>` : ""}`;
   return `
-    <details class="check-acc ${item.status}">
+    <details class="check-acc ${item.status}"${item.status === "fail" ? " data-tour=\"finding\"" : ""}>
       <summary>
         <span class="badge ${statusClass(item.status)}">${labelHealthStatus(item.status)}</span>
         <span>${esc(item.description || item.statement_id)}</span>
@@ -1247,6 +1564,38 @@ function formatWhen(value) {
     timeZone: "UTC",
   }) + " UTC";
 }
+
+function domainBadge(domain) {
+  const value = String(domain || "").toLowerCase();
+  if (value.includes("gdpr")) return "covered";
+  if (value.includes("ai")) return "missing";
+  return "pending";
+}
+
+function guessDomainFromPath(path) {
+  const lower = String(path || "").toLowerCase();
+  if (lower.includes("gdpr")) return "GDPR";
+  if (lower.includes("ai-act") || lower.includes("ai_act")) return "AI Act";
+  if (lower.includes("infosec")) return "InfoSec";
+  return "GDPR";
+}
+
+function guessTitleFromPath(path) {
+  const name = String(path || "").split("/").pop() || "";
+  return name.replace(/\.(md|txt)$/i, "").replace(/[-_]/g, " ");
+}
+
+function hideGeneratedProjectSchema() {
+  state.checkedWorkspaceId = "";
+  const schemaTab = "file:answers.json";
+  state.openTabs = (state.openTabs || []).filter((tab) => tab.id !== schemaTab);
+  if (state.activeTab === schemaTab) state.activeTab = "health";
+  if (state.fileCache) delete state.fileCache["answers.json"];
+}
+
+window.PoliviewApp = {
+  onDemoOff: hideGeneratedProjectSchema,
+};
 
 function labelStatus(status) {
   if (status === "covered") return "Covered";

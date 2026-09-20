@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Poliview</title>
+    <title>Poliview · GDPR &amp; EU AI Act</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&family=Roboto:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/static/styles.css?v=4" />
+    <link rel="stylesheet" href="/static/styles.css?v=19" />
     <script type="importmap">
       {
         "imports": {
@@ -31,47 +31,81 @@
         <span class="brand-mark" aria-hidden="true">Pv</span>
         <span class="brand-text">
           <strong>Poliview</strong>
-          <span class="brand-tag">Closed policy. Clear path.</span>
+          <span class="brand-tag">GDPR &amp; EU AI Act</span>
         </span>
       </a>
-      <md-tabs id="role-tabs" aria-label="Workspace role">
-        <md-primary-tab id="role-governance" inline-icon>
-          <md-icon slot="icon">gavel</md-icon>
-          Governance
-        </md-primary-tab>
-        <md-primary-tab id="role-owner" inline-icon>
-          <md-icon slot="icon">handshake</md-icon>
-          Project owner
-        </md-primary-tab>
-      </md-tabs>
-      <nav class="role-nav" aria-label="Primary">
-        <md-text-button href="#/" id="nav-policies">
-          <md-icon slot="icon">policy</md-icon>
-          Policies
-        </md-text-button>
-        <md-text-button href="#/project" id="nav-project">
-          <md-icon slot="icon">folder_open</md-icon>
-          Workspace
-        </md-text-button>
-        <md-text-button href="#/health" id="nav-health">
-          <md-icon slot="icon">monitor_heart</md-icon>
-          Health
-        </md-text-button>
-      </nav>
-      <p class="subtitle md-typescale-body-small" id="top-subtitle">Policy library</p>
+      <div class="nav-stack" data-tour="roles">
+        <md-tabs id="role-tabs" aria-label="Governance or project owner">
+          <md-primary-tab id="role-governance" inline-icon title="DPO or AI Act officer: closed checks, final say">
+            <md-icon slot="icon">gavel</md-icon>
+            Governance
+          </md-primary-tab>
+          <md-primary-tab id="role-owner" inline-icon title="Product team: pass, fail, or missing info without a meeting">
+            <md-icon slot="icon">work</md-icon>
+            Project owner
+          </md-primary-tab>
+        </md-tabs>
+        <nav class="role-nav" aria-label="Pages">
+          <div class="subnav subnav-governance">
+            <md-text-button href="#/" id="nav-policies" title="Load GDPR and the EU AI Act once, then reuse the closed checks">
+              <md-icon slot="icon">policy</md-icon>
+              Policies
+            </md-text-button>
+          </div>
+          <div class="subnav subnav-owner">
+            <md-text-button href="#/project" id="nav-project" title="GrowthBoard files plus Check compliance against those closed checks">
+              <md-icon slot="icon">folder_open</md-icon>
+              Workspace
+            </md-text-button>
+            <md-text-button href="#/health" id="nav-health" title="Why a check failed, what to do, and who to contact">
+              <md-icon slot="icon">monitor_heart</md-icon>
+              Health
+            </md-text-button>
+          </div>
+        </nav>
+      </div>
+      <div class="account-cluster" data-tour="account">
+        <p class="subtitle md-typescale-body-small" id="top-subtitle">Policy library · GDPR &amp; EU AI Act</p>
+        <div class="account-slot">
+          <label class="demo-toggle" title="Show the pitch fixtures: GDPR, EU AI Act, GrowthBoard, and Campus Pilot">
+            <span>Demo</span>
+            <md-switch id="demo-switch" selected aria-label="Show GDPR and EU AI Act demo fixtures"></md-switch>
+          </label>
+          <md-icon-button id="account-button" title="Replay the GDPR and EU AI Act walkthrough" aria-label="Replay the GDPR and EU AI Act walkthrough">
+            <md-icon>account_circle</md-icon>
+          </md-icon-button>
+        </div>
+      </div>
     </header>
     <md-linear-progress id="global-progress" indeterminate></md-linear-progress>
     <main id="app"></main>
     <md-snackbar id="app-snackbar"></md-snackbar>
+    <div id="future-tooltip" class="future-tip-float" hidden role="tooltip"></div>
     <md-dialog id="delete-dialog">
-      <div slot="headline">Delete policy?</div>
-      <div slot="content" id="delete-message">This removes the review and its closed JSON.</div>
+      <div slot="headline">Delete this policy?</div>
+      <div slot="content" id="delete-message">This removes the review and the closed JSON every project is measured against.</div>
       <div slot="actions">
         <md-text-button id="delete-cancel">Cancel</md-text-button>
         <md-filled-button id="delete-confirm">Delete</md-filled-button>
       </div>
     </md-dialog>
-    <script defer src="/static/app.js?v=5"></script>
-    <script defer src="/static/workspace.js?v=5"></script>
+    <div id="tour-root" hidden>
+      <div id="tour-scrim"></div>
+      <div id="tour-spot" hidden></div>
+      <section id="tour-card" class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+        <p class="tour-kicker" id="tour-kicker"></p>
+        <h2 class="md-typescale-title-large" id="tour-title"></h2>
+        <div class="tour-body" id="tour-body"></div>
+        <div class="tour-actions">
+          <md-text-button id="tour-skip">Skip</md-text-button>
+          <span class="tour-progress" id="tour-progress"></span>
+          <md-outlined-button id="tour-back">Back</md-outlined-button>
+          <md-filled-button id="tour-next">Next</md-filled-button>
+        </div>
+      </section>
+    </div>
+    <script defer src="/static/app.js?v=25"></script>
+    <script defer src="/static/tour.js?v=9"></script>
+    <script defer src="/static/workspace.js?v=17"></script>
   </body>
 </html>

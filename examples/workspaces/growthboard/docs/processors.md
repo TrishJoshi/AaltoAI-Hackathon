@@ -8,3 +8,5 @@
 
 The analytics vendor is not on the Aalto approved-subprocessor list.
 Procurement ticket has not been opened.
+Lawful basis recorded: legitimate interest.
+RoPA: not confirmed.

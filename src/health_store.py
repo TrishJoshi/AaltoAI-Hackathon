@@ -63,6 +63,25 @@ DEFAULT_OWNERS: dict[str, dict] = {
             ),
         ],
     },
+    "AI Act": {
+        "organization": "Aalto AI Office",
+        "owners": [
+            Contact(
+                name="Tuomas Laine",
+                role="owner",
+                title="AI Act officer",
+                email="tuomas.laine@aalto.example",
+                organization="Aalto AI Office",
+            ),
+            Contact(
+                name="Nora Salmi",
+                role="member",
+                title="AI governance analyst",
+                email="nora.salmi@aalto.example",
+                organization="Aalto AI Office",
+            ),
+        ],
+    },
     "Cloud": {
         "organization": "Aalto IT Procurement",
         "owners": [
@@ -367,6 +386,10 @@ def _find_policy_document(results: ResultsObject) -> PolicyDocument | None:
     title = (results.policy_title or "").lower()
     if "infosec" in title or domain.lower() == "infosec":
         slugs.append("infosec")
+    if "gdpr" in title or domain.lower() == "gdpr":
+        slugs.append("gdpr")
+    if "ai act" in title or domain.lower() in {"ai act", "aiact"}:
+        slugs.append("eu-ai-act")
     seen: set[str] = set()
     candidates: list[Path] = []
     for slug in slugs:

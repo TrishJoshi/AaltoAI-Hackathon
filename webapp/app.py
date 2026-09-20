@@ -16,35 +16,32 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 
 from src.generate_policies import generate_needed_policies
-from src.guide_agent import ChatMessage, guide_project_owner
 from src.health_store import dump_snapshot, list_health_runs, load_health_run, safe_run_id
-from src.models import PolicyKey, PolicyStatement
-from src.policy_agent import generate_policy_document
-from src.policy_merge import merge_generated_document, replace_section_checks, set_section_status
+from src.models import PolicyStatement
+from src.policy_merge import replace_section_checks, set_section_status
 from src.review_models import PolicyReview, SectionStatus
 from src.review_store import (
     create_review,
     delete_review,
-    export_review,
     list_reviews,
     load_review,
-    load_version_markdown,
     save_review,
     safe_review_id,
     update_review_from_markdown,
 )
-from src.seed_review import seed_infosec_review
+from src.seed_review import seed_eu_ai_act_review, seed_gdpr_review
 from src.workspace_store import (
+    add_workspace_file,
+    check_workspace,
     load_workspace,
     load_workspace_file,
-    load_workspace_health,
-    load_workspace_spec,
     list_workspaces,
-    recheck_workspace,
     safe_workspace_id,
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+DATA_DIR = ROOT / "data"
+POLICY_DATA_DIR = DATA_DIR / "policies"
 PDF_LATER = (
     "PDF upload is not enabled yet. Convert the PDF to Markdown and upload the .md file. "
     "PDF ingestion can be added later without changing this workflow."
@@ -53,11 +50,12 @@ PDF_LATER = (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    seed_infosec_review()
+    seed_gdpr_review()
+    seed_eu_ai_act_review()
     yield
 
 
-app = FastAPI(title="Poliview", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Poliview · GDPR & EU AI Act", version="0.1.0", lifespan=lifespan)
 
 
 class CreateReviewJSON(BaseModel):
@@ -67,13 +65,28 @@ class CreateReviewJSON(BaseModel):
 
 
 class SectionPatch(BaseModel):
-    keys: list[PolicyKey] = []
     statements: list[PolicyStatement] = []
 
 
 class StatusBody(BaseModel):
     status: SectionStatus
     note: str = ""
+
+
+class ProjectFileBody(BaseModel):
+    path: str
+    content: str = ""
+
+
+class FromDataBody(BaseModel):
+    path: str
+    domain: str = "GDPR"
+    title: str = ""
+    review_id: str = ""
+
+
+class CheckBody(BaseModel):
+    parse: bool = False
 
 
 def _summarize(review: PolicyReview) -> dict:
@@ -119,6 +132,54 @@ def _section_or_404(review: PolicyReview, section_id: str):
     return section
 
 
+def list_data_markdown() -> list[dict]:
+    files: list[dict] = []
+    if not POLICY_DATA_DIR.is_dir():
+        return files
+    root = DATA_DIR.resolve()
+    for path in sorted(POLICY_DATA_DIR.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in {".md", ".txt"}:
+            continue
+        rel_data = path.resolve().relative_to(root)
+        rel_repo = path.resolve().relative_to(ROOT.resolve())
+        files.append(
+            {
+                "path": str(rel_repo).replace("\\", "/"),
+                "name": path.name,
+                "folder": "data/policies",
+                "label": str(rel_data).replace("\\", "/"),
+            }
+        )
+    return files
+
+
+def resolve_data_markdown(rel: str) -> Path:
+    cleaned = (rel or "").replace("\\", "/").lstrip("/")
+    if not cleaned or ".." in cleaned.split("/"):
+        raise ValueError("Path must be a Markdown file under data/")
+    path = (ROOT / cleaned).resolve()
+    try:
+        path.relative_to(DATA_DIR.resolve())
+    except ValueError as exc:
+        raise ValueError("Path must be a Markdown file under data/") from exc
+    if path.suffix.lower() not in {".md", ".txt"}:
+        raise ValueError("Only Markdown (.md) under data/ can be loaded.")
+    if not path.is_file():
+        raise FileNotFoundError("Markdown file not found")
+    return path
+
+
+def _guess_domain(path: str, fallback: str = "GDPR") -> str:
+    lower = path.lower()
+    if "gdpr" in lower:
+        return "GDPR"
+    if "ai-act" in lower or "ai_act" in lower or "/ai." in lower:
+        return "AI Act"
+    if "infosec" in lower:
+        return "InfoSec"
+    return fallback or "GDPR"
+
+
 def _read_markdown_upload(filename: str, raw: bytes) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix == ".pdf":
@@ -137,6 +198,37 @@ def _read_markdown_upload(filename: str, raw: bytes) -> str:
 @app.get("/api/reviews")
 def api_list_reviews() -> dict:
     return {"reviews": [_summarize(item) for item in list_reviews()]}
+
+
+@app.get("/api/data/markdown")
+def api_list_data_markdown() -> dict:
+    return {"root": "data/policies", "files": list_data_markdown()}
+
+
+@app.post("/api/reviews/from-data")
+def api_review_from_data(payload: FromDataBody) -> dict:
+    try:
+        path = resolve_data_markdown(payload.path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    markdown = path.read_text(encoding="utf-8")
+    source = str(path.relative_to(ROOT)).replace("\\", "/")
+    domain = payload.domain.strip() or _guess_domain(source)
+    if payload.review_id.strip():
+        review = update_review_from_markdown(_load(payload.review_id.strip()), markdown, path.name)
+        return _dump(review)
+    title = payload.title.strip() or path.stem.replace("-", " ").replace("_", " ")
+    review = create_review(
+        domain=domain,
+        markdown=markdown,
+        source_md=source,
+        filename=path.name,
+        title=title,
+        review_id=None,
+    )
+    return _dump(review)
 
 
 @app.post("/api/reviews")
@@ -190,27 +282,6 @@ def api_get_review(review_id: str) -> dict:
     return _dump(_load(review_id))
 
 
-@app.get("/api/reviews/{review_id}/versions")
-def api_list_versions(review_id: str) -> dict:
-    review = _load(review_id)
-    return {"id": review.id, "version": review.version, "versions": [item.model_dump() for item in review.versions]}
-
-
-@app.get("/api/reviews/{review_id}/versions/{version}")
-def api_get_version(review_id: str, version: int) -> dict:
-    review = _load(review_id)
-    try:
-        markdown = load_version_markdown(review.id, version)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    meta = next((item for item in review.versions if item.version == version), None)
-    return {
-        "version": version,
-        "markdown": markdown,
-        "meta": meta.model_dump() if meta else None,
-    }
-
-
 @app.post("/api/reviews/{review_id}/generate-policies")
 def api_generate_policies(review_id: str) -> dict:
     review = _load(review_id)
@@ -238,38 +309,12 @@ def api_patch_section(review_id: str, section_id: str, body: SectionPatch) -> di
         document = replace_section_checks(
             review.document,
             section_id,
-            body.keys,
             body.statements,
         )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    reviews = dict(review.reviews)
-    previous = reviews.get(section_id)
-    if previous:
-        reviews[section_id] = previous.model_copy(update={"needs_generation": False})
-    review = review.model_copy(update={"document": document, "reviews": reviews})
-    save_review(review)
-    return _dump(review)
-
-
-@app.post("/api/reviews/{review_id}/sections/{section_id}/generate")
-def api_generate_section(review_id: str, section_id: str) -> dict:
-    review = _load(review_id)
-    section = _section_or_404(review, section_id)
-    try:
-        generated = generate_policy_document(
-            domain=review.domain,
-            policy_text=section.markdown,
-            source=review.source_md,
-            source_section_id=section_id,
-        )
-        document = merge_generated_document(review.document, generated, section_id)
-    except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors()) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
     reviews = dict(review.reviews)
     previous = reviews.get(section_id)
     if previous:
@@ -291,13 +336,6 @@ def api_set_status(review_id: str, section_id: str, body: StatusBody) -> dict:
     return _dump(review)
 
 
-@app.get("/api/reviews/{review_id}/export")
-def api_export(review_id: str) -> dict:
-    review = _load(review_id)
-    path = export_review(review)
-    return {"path": str(path.relative_to(ROOT)).replace("\\", "/")}
-
-
 @app.delete("/api/reviews/{review_id}")
 def api_delete_review(review_id: str) -> dict:
     try:
@@ -307,12 +345,6 @@ def api_delete_review(review_id: str) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Review not found") from exc
     return {"ok": True, "id": review_id}
-
-
-class ChatBody(BaseModel):
-    messages: list[ChatMessage] = []
-    active_file: str = ""
-    focus_policy_id: str = ""
 
 
 @app.get("/api/projects")
@@ -340,39 +372,27 @@ def api_get_project_file(project_id: str, path: str = "") -> dict:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@app.post("/api/projects/{project_id}/files")
+def api_add_project_file(project_id: str, payload: ProjectFileBody) -> dict:
+    try:
+        return add_workspace_file(safe_workspace_id(project_id), payload.path, payload.content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.post("/api/projects/{project_id}/check")
-def api_recheck_project(project_id: str) -> dict:
+def api_recheck_project(project_id: str, payload: CheckBody | None = None) -> dict:
+    body = payload or CheckBody()
     try:
-        return recheck_workspace(safe_workspace_id(project_id))
+        return check_workspace(safe_workspace_id(project_id), parse=body.parse)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@app.post("/api/projects/{project_id}/chat")
-def api_project_chat(project_id: str, body: ChatBody) -> dict:
-    try:
-        spec = load_workspace_spec(safe_workspace_id(project_id))
-        snapshot = load_workspace_health(spec)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    excerpt = ""
-    if body.active_file:
-        try:
-            excerpt = load_workspace_file(spec["id"], body.active_file).get("content") or ""
-        except (FileNotFoundError, ValueError):
-            excerpt = ""
-    reply = guide_project_owner(
-        snapshot=snapshot,
-        messages=body.messages,
-        active_file=body.active_file,
-        file_excerpt=excerpt,
-        focus_policy_id=body.focus_policy_id,
-    )
-    return reply.model_dump()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/health/runs")

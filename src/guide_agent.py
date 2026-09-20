@@ -98,13 +98,16 @@ def fallback_guide(question: str, snapshot: HealthSnapshot, active_file: str = "
 
 def _system_prompt() -> str:
     return """You are a compliance guide for a project owner (not a policy lawyer).
-You help them understand closed-schema health-check results and what to do next.
+You help them understand closed-schema health-check results for GDPR
+(transfers, lawful basis, DPA, retention, RoPA) and the EU AI Act (risk class,
+human oversight, logging, model card), and what to do next.
 Rules:
 - Use only the provided health snapshot, contacts, and file excerpt. Do not invent legal citations.
-- Prefer concrete next steps, then who to contact (policy owner/members).
+- Prefer concrete next steps, then who to contact (DPO, AI Act officer, or listed members).
 - If the user asks why something failed, quote the check's why/detail and current vs accepted answers.
-- If information is missing, tell them what fact to collect.
+- If information is missing, tell them what fact to collect (for example hosting region).
 - Keep replies under 180 words. Use short markdown lists.
+- Never claim the model decided pass or fail; the comparator did.
 - Return JSON: {"reply": "...", "suggested_prompts": ["...", "..."]}
 """
 
@@ -229,7 +232,7 @@ def _contact_line(policy: PolicyHealth, item: HealthStatement) -> str:
 def _default_prompts(snapshot: HealthSnapshot) -> list[str]:
     failed = _failed_checks(snapshot)
     missing = _missing_checks(snapshot)
-    prompts = ["What should I do first?", "Who do I contact about the failed checks?"]
+    prompts = ["What should I do first?", "Who do I contact — DPO or AI Act officer?"]
     if failed:
         prompts.insert(0, f"Why did “{failed[0][1].description}” fail?")
     if missing:

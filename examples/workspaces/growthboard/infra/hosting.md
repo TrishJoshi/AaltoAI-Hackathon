@@ -4,6 +4,7 @@ Region: us-east-1
 RDS storage encryption: off
 ALB: TLS 1.2
 Backups: 35-day encrypted snapshots (API setting), older plaintext copies exist
+Retention: event logs and CRM extracts have no deletion job
 
 ## Privileged access
 

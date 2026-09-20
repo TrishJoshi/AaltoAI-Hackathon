@@ -79,6 +79,5 @@ class PolicyReview(BaseModel):
 def empty_document(domain: str, title: str, source: str) -> PolicyDocument:
     return PolicyDocument(
         meta=PolicyMeta(domain=domain, title=title, source=source),
-        keys=[],
         statements=[],
     )

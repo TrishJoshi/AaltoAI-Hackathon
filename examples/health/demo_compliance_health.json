@@ -1,6 +1,6 @@
 {
   "id": "demo_compliance_health",
-  "label": "GrowthBoard · full showcase (demo)",
+  "label": "GrowthBoard · GDPR + EU AI Act (demo)",
   "kind": "demo",
   "project_name": "GrowthBoard",
   "project_source": "examples/projects/noncompliant.md",
@@ -8,172 +8,10 @@
   "overall_status": "fail",
   "policies": [
     {
-      "policy_id": "infosec",
-      "title": "Internal Information Security Standard v3",
-      "domain": "InfoSec",
-      "version": "1.0",
-      "source": "examples/policies/infosec.md",
-      "organization": "Aalto Information Security Office",
-      "owners": [
-        {
-          "name": "Maya Koskinen",
-          "role": "owner",
-          "title": "Chief Information Security Officer",
-          "email": "maya.koskinen@aalto.example",
-          "organization": "Aalto Information Security Office"
-        },
-        {
-          "name": "Jonas Niemi",
-          "role": "member",
-          "title": "Security analyst",
-          "email": "jonas.niemi@aalto.example",
-          "organization": "Aalto Information Security Office"
-        }
-      ],
-      "results": [
-        {
-          "statement_id": "stmt_data_residency",
-          "description": "Personal data of EU persons must be stored in the EU or EEA.",
-          "status": "fail",
-          "detail": "data_residency='US' not in ['EU', 'EEA']",
-          "mismatched_keys": ["data_residency"],
-          "missing_keys": [],
-          "answers": { "data_residency": "US" },
-          "accepted": { "data_residency": ["EU", "EEA"] },
-          "questions": { "data_residency": "Where is personal data stored in production?" },
-          "why": "Personal data of EU persons is hosted in Amazon RDS us-east-1 (United States). The accepted production regions are EU or EEA only.",
-          "remediation": {
-            "actions": [
-              "Migrate the production datastore that holds personal data to an EU or EEA region (for example eu-north-1 / Finland).",
-              "Stop processing EU personal data in this system until residency is compliant."
-            ],
-            "steps": [
-              "Inventory which tables and object stores contain names, emails, or other personal data.",
-              "Choose an approved EU/EEA region and plan a cutover (snapshot, restore, DNS, secrets).",
-              "Update hosting documentation so the recorded residency is EU or EEA.",
-              "Re-run the compliance health check after production traffic is in the new region."
-            ],
-            "contacts": [
-              {
-                "name": "Maya Koskinen",
-                "role": "owner",
-                "title": "Chief Information Security Officer",
-                "email": "maya.koskinen@aalto.example",
-                "organization": "Aalto Information Security Office"
-              },
-              {
-                "name": "Jonas Niemi",
-                "role": "member",
-                "title": "Security analyst",
-                "email": "jonas.niemi@aalto.example",
-                "organization": "Aalto Information Security Office"
-              }
-            ]
-          }
-        },
-        {
-          "statement_id": "stmt_encryption",
-          "description": "Production datastores holding personal data must use AES-256 at rest.",
-          "status": "fail",
-          "detail": "encryption_at_rest='TLS-only' not in ['AES-256']",
-          "mismatched_keys": ["encryption_at_rest"],
-          "missing_keys": [],
-          "answers": { "encryption_at_rest": "TLS-only" },
-          "accepted": { "encryption_at_rest": ["AES-256"] },
-          "questions": { "encryption_at_rest": "What encryption is used for production data at rest?" },
-          "why": "TLS terminates at the load balancer and disk encryption is not enabled on RDS. Transport encryption alone does not satisfy encryption at rest.",
-          "remediation": {
-            "actions": [
-              "Enable AES-256 (or an approved equivalent) encryption at rest on the production database and object stores.",
-              "Rotate any plaintext backups created while the volume was unencrypted."
-            ],
-            "steps": [
-              "Turn on storage encryption for the production RDS instance (or recreate it from an encrypted snapshot).",
-              "Enable default encryption on the object-storage bucket used for exports.",
-              "Record encryption_at_rest as AES-256 in the project answers and re-validate."
-            ],
-            "contacts": [
-              {
-                "name": "Maya Koskinen",
-                "role": "owner",
-                "title": "Chief Information Security Officer",
-                "email": "maya.koskinen@aalto.example",
-                "organization": "Aalto Information Security Office"
-              }
-            ]
-          }
-        },
-        {
-          "statement_id": "stmt_dpa",
-          "description": "A DPA must be signed when PII is processed; otherwise not_applicable.",
-          "status": "pass",
-          "detail": "all accepted values match",
-          "mismatched_keys": [],
-          "missing_keys": [],
-          "answers": { "dpa_signed": "yes" },
-          "accepted": { "dpa_signed": ["yes", "not_applicable"] },
-          "questions": { "dpa_signed": "Is a data processing agreement signed with every processor?" },
-          "why": "A data processing agreement is on file with the current processors, so this statement passes.",
-          "remediation": {
-            "actions": ["No change required for this check."],
-            "steps": [],
-            "contacts": [
-              {
-                "name": "Maya Koskinen",
-                "role": "owner",
-                "title": "Chief Information Security Officer",
-                "email": "maya.koskinen@aalto.example",
-                "organization": "Aalto Information Security Office"
-              }
-            ]
-          }
-        },
-        {
-          "statement_id": "stmt_mfa",
-          "description": "Interactive production access must require MFA.",
-          "status": "fail",
-          "detail": "mfa_for_production='no' not in ['yes']",
-          "mismatched_keys": ["mfa_for_production"],
-          "missing_keys": [],
-          "answers": { "mfa_for_production": "no" },
-          "accepted": { "mfa_for_production": ["yes"] },
-          "questions": { "mfa_for_production": "Is MFA required for interactive production access?" },
-          "why": "Developers can open the cloud console and use a shared SSH key without a second factor. Password-only or shared-key production access is not allowed.",
-          "remediation": {
-            "actions": [
-              "Enforce MFA on the cloud console, SSH, and any jump hosts that reach production.",
-              "Retire the shared production SSH key in 1Password."
-            ],
-            "steps": [
-              "Enable organisation-wide MFA (IdP / AWS IAM / Azure AD) and block console login without a second factor.",
-              "Replace the shared SSH key with per-person keys or SSO short-lived credentials.",
-              "Confirm mfa_for_production is yes, then re-run the health check."
-            ],
-            "contacts": [
-              {
-                "name": "Jonas Niemi",
-                "role": "member",
-                "title": "Security analyst",
-                "email": "jonas.niemi@aalto.example",
-                "organization": "Aalto Information Security Office"
-              },
-              {
-                "name": "Maya Koskinen",
-                "role": "owner",
-                "title": "Chief Information Security Officer",
-                "email": "maya.koskinen@aalto.example",
-                "organization": "Aalto Information Security Office"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
       "policy_id": "gdpr",
-      "title": "GDPR records of processing (Art. 5, 30, 35)",
+      "title": "GDPR processing standard (Arts. 5, 6, 28, 30, 44–46)",
       "domain": "GDPR",
-      "version": "2.1",
+      "version": "1.0",
       "source": "examples/policies/gdpr.md",
       "organization": "Aalto Data Protection Office",
       "owners": [
@@ -194,8 +32,48 @@
       ],
       "results": [
         {
+          "statement_id": "stmt_transfers",
+          "description": "Personal data of EU persons may only be stored in the EU, the EEA, or an adequate country.",
+          "status": "fail",
+          "detail": "data_residency='US' not in ['EU', 'EEA', 'adequacy']",
+          "mismatched_keys": ["data_residency"],
+          "missing_keys": [],
+          "answers": { "data_residency": "US" },
+          "accepted": { "data_residency": ["EU", "EEA", "adequacy"] },
+          "questions": { "data_residency": "Where is personal data stored in production?" },
+          "why": "Personal data of EU persons is hosted in Amazon RDS us-east-1 (United States). Accepted destinations are EU, EEA, or a country with an adequacy decision.",
+          "remediation": {
+            "actions": [
+              "Migrate the production datastore that holds personal data to an EU or EEA region (for example eu-north-1 / Finland).",
+              "Stop processing EU personal data in this system until the transfer tool is in place."
+            ],
+            "steps": [
+              "Inventory which tables and object stores contain names, emails, or other personal data.",
+              "Choose an approved EU/EEA region and plan a cutover (snapshot, restore, DNS, secrets).",
+              "Update hosting documentation so the recorded residency is EU, EEA, or adequacy.",
+              "Re-run the compliance health check after production traffic is in the new region."
+            ],
+            "contacts": [
+              {
+                "name": "Elena Berg",
+                "role": "owner",
+                "title": "Data Protection Officer",
+                "email": "elena.berg@aalto.example",
+                "organization": "Aalto Data Protection Office"
+              },
+              {
+                "name": "Samir Haddad",
+                "role": "member",
+                "title": "Legal counsel, privacy",
+                "email": "samir.haddad@aalto.example",
+                "organization": "Legal Services"
+              }
+            ]
+          }
+        },
+        {
           "statement_id": "stmt_lawful_basis",
-          "description": "Each processing activity must have a recorded lawful basis.",
+          "description": "Each processing activity must have a recorded lawful basis under Article 6.",
           "status": "pass",
           "detail": "all accepted values match",
           "mismatched_keys": [],
@@ -219,8 +97,33 @@
           }
         },
         {
+          "statement_id": "stmt_dpa",
+          "description": "An Article 28 DPA must be signed when a processor handles personal data; otherwise not_applicable.",
+          "status": "pass",
+          "detail": "all accepted values match",
+          "mismatched_keys": [],
+          "missing_keys": [],
+          "answers": { "dpa_signed": "yes" },
+          "accepted": { "dpa_signed": ["yes", "not_applicable"] },
+          "questions": { "dpa_signed": "Is a data processing agreement signed with every processor?" },
+          "why": "A data processing agreement is on file with the current cloud processor, so this statement passes.",
+          "remediation": {
+            "actions": ["No change required for this check."],
+            "steps": [],
+            "contacts": [
+              {
+                "name": "Elena Berg",
+                "role": "owner",
+                "title": "Data Protection Officer",
+                "email": "elena.berg@aalto.example",
+                "organization": "Aalto Data Protection Office"
+              }
+            ]
+          }
+        },
+        {
           "statement_id": "stmt_retention",
-          "description": "Personal data must not be kept longer than the documented retention period.",
+          "description": "Personal data must not be kept longer than a documented, finite retention period.",
           "status": "fail",
           "detail": "retention_policy='indefinite' not in ['defined']",
           "mismatched_keys": ["retention_policy"],
@@ -260,7 +163,7 @@
         },
         {
           "statement_id": "stmt_ropa",
-          "description": "A record of processing activities (RoPA) must exist for this project.",
+          "description": "This processing activity must be listed in the organisation’s record of processing activities.",
           "status": "missinginfo",
           "detail": "ropa_recorded is missing",
           "mismatched_keys": [],
@@ -289,169 +192,158 @@
               }
             ]
           }
-        },
-        {
-          "statement_id": "stmt_dpia",
-          "description": "A DPIA is completed when analytics profiling of individuals is in scope.",
-          "status": "pass",
-          "detail": "all accepted values match",
-          "mismatched_keys": [],
-          "missing_keys": [],
-          "answers": { "dpia_completed": "yes" },
-          "accepted": { "dpia_completed": ["yes", "not_applicable"] },
-          "questions": { "dpia_completed": "Has a DPIA been completed (or marked not applicable)?" },
-          "why": "A data protection impact assessment is on file for CRM analytics profiling.",
-          "remediation": {
-            "actions": ["No change required for this check."],
-            "steps": [],
-            "contacts": [
-              {
-                "name": "Elena Berg",
-                "role": "owner",
-                "title": "Data Protection Officer",
-                "email": "elena.berg@aalto.example",
-                "organization": "Aalto Data Protection Office"
-              }
-            ]
-          }
         }
       ]
     },
     {
-      "policy_id": "cloud",
-      "title": "Approved cloud and subprocessors",
-      "domain": "Cloud",
-      "version": "1.4",
-      "source": "examples/policies/cloud.md",
-      "organization": "Aalto IT Procurement",
+      "policy_id": "eu-ai-act",
+      "title": "EU AI Act use standard (Arts. 6, 10, 13, 14)",
+      "domain": "AI Act",
+      "version": "1.0",
+      "source": "examples/policies/eu-ai-act.md",
+      "organization": "Aalto AI Office",
       "owners": [
         {
-          "name": "Priya Nair",
+          "name": "Tuomas Laine",
           "role": "owner",
-          "title": "Head of cloud procurement",
-          "email": "priya.nair@aalto.example",
-          "organization": "Aalto IT Procurement"
+          "title": "AI Act officer",
+          "email": "tuomas.laine@aalto.example",
+          "organization": "Aalto AI Office"
         },
         {
-          "name": "Leo Mäkinen",
+          "name": "Nora Salmi",
           "role": "member",
-          "title": "Cloud architect",
-          "email": "leo.makinen@aalto.example",
-          "organization": "Aalto IT Services"
+          "title": "AI governance analyst",
+          "email": "nora.salmi@aalto.example",
+          "organization": "Aalto AI Office"
         }
       ],
       "results": [
         {
-          "statement_id": "stmt_approved_vendor",
-          "description": "Production subprocessors must be on the approved-vendor list.",
+          "statement_id": "stmt_risk_class",
+          "description": "Each production AI system must record an AI Act risk class that is not prohibited.",
           "status": "fail",
-          "detail": "analytics_vendor='unlisted' not in ['approved']",
-          "mismatched_keys": ["analytics_vendor"],
+          "detail": "ai_risk_class='high_risk' not in ['limited', 'minimal', 'not_applicable']",
+          "mismatched_keys": ["ai_risk_class"],
           "missing_keys": [],
-          "answers": { "analytics_vendor": "unlisted" },
-          "accepted": { "analytics_vendor": ["approved"] },
-          "questions": { "analytics_vendor": "Is every production analytics/subprocessor on the approved list?" },
-          "why": "GrowthBoard pushes events to a third-party analytics vendor that is not on the approved-subprocessor list.",
+          "answers": { "ai_risk_class": "high_risk" },
+          "accepted": { "ai_risk_class": ["limited", "minimal", "not_applicable"] },
+          "questions": { "ai_risk_class": "What is the AI Act risk class of production AI in this project?" },
+          "why": "GrowthBoard’s lead-scoring model is recorded as high-risk. This closed check only accepts limited, minimal, or not_applicable until governance extends the enum.",
           "remediation": {
             "actions": [
-              "Stop sending personal data to the unlisted vendor until procurement approves it.",
-              "Switch to an already-approved analytics tool, or start a vendor assessment."
+              "Confirm the risk class with the AI Act officer — marketing scoring may be limited-risk if it does not decide access to education or employment.",
+              "If the use is high-risk, add the missing high_risk value to accepted only after a human review of Annex III."
             ],
             "steps": [
-              "Name the current vendor and the personal data it receives.",
-              "Open a procurement ticket with Aalto IT Procurement (template: new subprocessor).",
-              "Either disable the integration or move to an approved vendor, then set analytics_vendor to approved.",
+              "Describe what the model decides (ranking vs automated exclusion).",
+              "Ask the AI Act officer whether Annex III applies.",
+              "Either stop automated ranking, add a named reviewer, or update the closed schema after sign-off.",
               "Re-run the health check."
             ],
             "contacts": [
               {
-                "name": "Priya Nair",
+                "name": "Tuomas Laine",
                 "role": "owner",
-                "title": "Head of cloud procurement",
-                "email": "priya.nair@aalto.example",
-                "organization": "Aalto IT Procurement"
+                "title": "AI Act officer",
+                "email": "tuomas.laine@aalto.example",
+                "organization": "Aalto AI Office"
+              }
+            ]
+          }
+        },
+        {
+          "statement_id": "stmt_human_oversight",
+          "description": "High-risk AI that affects people must have a named human reviewer.",
+          "status": "fail",
+          "detail": "human_oversight='no' not in ['yes', 'not_applicable']",
+          "mismatched_keys": ["human_oversight"],
+          "missing_keys": [],
+          "answers": { "human_oversight": "no" },
+          "accepted": { "human_oversight": ["yes", "not_applicable"] },
+          "questions": { "human_oversight": "Is a named human reviewer in the loop for AI decisions that affect people?" },
+          "why": "Lead scoring ranks CRM contacts with no named reviewer who can override the score.",
+          "remediation": {
+            "actions": [
+              "Name a reviewer who must approve or can override scores before they change outreach.",
+              "Disable automated ranking until oversight is in place."
+            ],
+            "steps": [
+              "Assign a named role (for example the campaign owner).",
+              "Document the override path in the model card.",
+              "Set human_oversight to yes and re-run the health check."
+            ],
+            "contacts": [
+              {
+                "name": "Tuomas Laine",
+                "role": "owner",
+                "title": "AI Act officer",
+                "email": "tuomas.laine@aalto.example",
+                "organization": "Aalto AI Office"
               },
               {
-                "name": "Leo Mäkinen",
+                "name": "Nora Salmi",
                 "role": "member",
-                "title": "Cloud architect",
-                "email": "leo.makinen@aalto.example",
-                "organization": "Aalto IT Services"
+                "title": "AI governance analyst",
+                "email": "nora.salmi@aalto.example",
+                "organization": "Aalto AI Office"
               }
             ]
           }
         },
         {
-          "statement_id": "stmt_backups",
-          "description": "Encrypted backups must be retained for at least 30 days.",
+          "statement_id": "stmt_ai_logging",
+          "description": "High-impact AI outputs must be logged for at least 90 days.",
           "status": "pass",
           "detail": "all accepted values match",
           "mismatched_keys": [],
           "missing_keys": [],
-          "answers": { "backup_retention_ok": "yes" },
-          "accepted": { "backup_retention_ok": ["yes"] },
-          "questions": { "backup_retention_ok": "Are encrypted backups retained for at least 30 days?" },
-          "why": "Automated encrypted snapshots are retained for 35 days.",
+          "answers": { "ai_logging": "yes" },
+          "accepted": { "ai_logging": ["yes", "not_applicable"] },
+          "questions": { "ai_logging": "Are high-impact AI outputs logged for at least 90 days?" },
+          "why": "Lead-score outputs are retained in the analytics warehouse for more than 90 days.",
           "remediation": {
             "actions": ["No change required for this check."],
             "steps": [],
             "contacts": [
               {
-                "name": "Leo Mäkinen",
+                "name": "Nora Salmi",
                 "role": "member",
-                "title": "Cloud architect",
-                "email": "leo.makinen@aalto.example",
-                "organization": "Aalto IT Services"
+                "title": "AI governance analyst",
+                "email": "nora.salmi@aalto.example",
+                "organization": "Aalto AI Office"
               }
             ]
           }
         },
         {
-          "statement_id": "stmt_logging",
-          "description": "Privileged production actions must be logged centrally.",
-          "status": "pass",
-          "detail": "all accepted values match",
-          "mismatched_keys": [],
+          "statement_id": "stmt_transparency",
+          "description": "Production AI features must publish a model card (purpose, family, limitations).",
+          "status": "fail",
+          "detail": "model_card='no' not in ['yes', 'not_applicable']",
+          "mismatched_keys": ["model_card"],
           "missing_keys": [],
-          "answers": { "central_logging": "yes" },
-          "accepted": { "central_logging": ["yes"] },
-          "questions": { "central_logging": "Are privileged production actions sent to central logging?" },
-          "why": "CloudTrail / audit logs are enabled and shipped to the central SIEM.",
+          "answers": { "model_card": "no" },
+          "accepted": { "model_card": ["yes", "not_applicable"] },
+          "questions": { "model_card": "Is a model card published for production AI features?" },
+          "why": "The lead-scoring model is in production without a published model card.",
           "remediation": {
-            "actions": ["No change required for this check."],
-            "steps": [],
+            "actions": [
+              "Publish a short model card: purpose, model family, and known limitations.",
+              "Link it from the project README."
+            ],
+            "steps": [
+              "Draft purpose (CRM ranking), family, and limitations (bias, no exclusion decisions).",
+              "Store the card next to the policy review.",
+              "Set model_card to yes and re-run the health check."
+            ],
             "contacts": [
               {
-                "name": "Leo Mäkinen",
-                "role": "member",
-                "title": "Cloud architect",
-                "email": "leo.makinen@aalto.example",
-                "organization": "Aalto IT Services"
-              }
-            ]
-          }
-        },
-        {
-          "statement_id": "stmt_incident_contact",
-          "description": "A 24/7 incident contact must be listed for the production service.",
-          "status": "pass",
-          "detail": "all accepted values match",
-          "mismatched_keys": [],
-          "missing_keys": [],
-          "answers": { "incident_contact": "yes" },
-          "accepted": { "incident_contact": ["yes"] },
-          "questions": { "incident_contact": "Is an incident contact listed for this service?" },
-          "why": "The team on-call calendar is published in the service catalogue.",
-          "remediation": {
-            "actions": ["No change required for this check."],
-            "steps": [],
-            "contacts": [
-              {
-                "name": "Priya Nair",
+                "name": "Tuomas Laine",
                 "role": "owner",
-                "title": "Head of cloud procurement",
-                "email": "priya.nair@aalto.example",
-                "organization": "Aalto IT Procurement"
+                "title": "AI Act officer",
+                "email": "tuomas.laine@aalto.example",
+                "organization": "Aalto AI Office"
               }
             ]
           }
